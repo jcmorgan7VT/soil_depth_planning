@@ -1,0 +1,21 @@
+---
+title: "gathering_data_4_18_24"
+format: html
+editor: visual
+---
+
+## Seismic field plan for summer 24
+
+Gathering datasets to use to plan where seismic measurements will be made.
+
+```{r}
+#gathering datasets
+#topography
+#accurate flowlines of network
+#classified stream map that scott sent me
+#most recent soil map
+#GPR results
+#well locations
+#seismic measurements from last summer
+```
+
