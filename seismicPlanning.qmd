@@ -2,20 +2,135 @@
 title: "gathering_data_4_18_24"
 format: html
 editor: visual
+editor_options: 
+  chunk_output_type: console
 ---
 
 ## Seismic field plan for summer 24
 
+
 Gathering datasets to use to plan where seismic measurements will be made.
 
 ```{r}
+library(pacman)
+p_load(tidyverse, sp, mapview, tmap, stars,
+       lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
+       terra,  tidyterra)
 #gathering datasets
-#topography
+#watershed shapes to clip and mask by
+sheds <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_wsheds')
+#method to subset shapefiles- use base r ways to subset
+w3 <- sheds[2,]
+plot(w3) #currently in NAD83
+#topography- 1m hydro enforced DEM
+dem <- terra::rast("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.211.2&entityid=6a86dae0381906a86ec617385f11c91f")
+plot(dem) #currently in NAD83
 #accurate flowlines of network
+#using Carrie's flowlines
+w3_stream <- vect("~/Documents/VT Research/HBTopModel/HB/hbstream/hb42_master_startend.shp")
+plot(w3_stream) #currently in NAD83
 #classified stream map that scott sent me
+w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
+plot(w3_regime) #currently in NAD83
 #most recent soil map
+soil <- terra::rast("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.380.2&entityid=f083871fa0116b17b7398ca48eac7627")
+plot(soil) #currently in NAD83
+#locations and depths of soil pits, archive entry from Scott
+#https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.210.2
+scott <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=42d7e94aea392080e7c40877c9a5df83")
+#classifies depth with a classification column
+#1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
+#does not include soil pits from lateral weathering drive, I think
+scott2 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=71688e053357f602e2b118055ff72c30")
+#lat weathering pedons
+lat_locs <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=bb91029a464278a2e47451aafec435c2")
+lat_depth <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=cca9cc4a0a7218d0602aede8f3f8697e")
 #GPR results
-#well locations
+
+#well locations with associated depth
+#metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.161.4
+#depth in cm
+wells <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=1549ca484d74e547def10197e8c502dc")
+#also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
+#outcrops, from 1994 geologic map
+rocks <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops')
+plot(rocks)
+#soil depth from valley wide veg plots, from battles and fahey
+fahey <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.121.5&entityid=d2a6900ad5470d00dce0d7fa0bca3eec")
 #seismic measurements from last summer
+
+#cody gillin bedrock outcrop maps
+
+#Ksat measurements in W3
+ksat <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.364.1&entityid=1716abc55e229147fe45d60cbe7a4b65")
+
 ```
+
+```{r}
+#now that I have all of these datasets, I need to clip them to the extent of watershed 3
+crop_dem <- crop(dem, w3)
+mask_dem <- mask(crop_dem, w3)
+
+#wells
+wells_vect <- vect(wells, geom=c("Longitude", "Latitude"), crs="epsg:4326", keepgeom=FALSE)
+wells_vect_proj <- project(wells_vect, crs(dem))
+plot(wells_vect_proj)
+wells_rast <- rasterize(wells_vect_proj, mask_dem, field = "Max_depth", fun = "mean")
+plot(wells_rast)
+
+#soils pits
+scott <- mutate(scott, depth = depthclass * 25)
+scott_vect <- vect(scott, geom=c("easting", "northing"), crs=crs(dem), keepgeom=FALSE)
+plot(scott_vect)
+# Create new column filled with default colour
+scott_vect$Colour="black"
+# Set new column values to appropriate colours
+scott_vect$Colour[scott_vect$depthclass>=3]="red"
+scott_vect$Colour[scott_vect$depthclass<=2]="blue"
+
+scott_rast <- rasterize(scott_vect, mask_dem, field = "depth", fun = "mean")
+plot(scott_rast)
+
+avg <- ((scott_rast + wells_rast))
+ra <- aggregate(r, 10)
+
+#attempt to interpolate a depth model from these two datasets and DEM
+xy <- data.frame(xyFromCell(scott_rast, 1:ncell(scott_rast)))
+v <- values(scott_rast)
+i <- !is.na(v)
+xy <- xy[i,]
+v <- v[i]
+
+tps <- Tps(xy, v)
+p <- rast(scott_rast)
+
+# use model to predict values at all locations
+p <- interpolate(p, tps)
+p <- mask(p, mask_dem)
+plot(p)
+points(wells_vect_proj, cex = wells_vect_proj$Max_depth/200)
+points(scott_vect, cex = scott_vect$depth / 200)
+lines(w3_stream, col = "blue")
+plot(mask(crop(soil, w3), w3))
+plot(avg)
+
+se <- interpolate(rast(p), tps, fun=predictSE)
+se <- mask(se, mask_dem)
+plot(se)
+#interpolate point measurements into rasters with the same resolution as the DEM
+#OR all measurements in a cell go into a fitted normal distribution, describing the depths observed in that cell. By assuming a normal distribution, I can just add the means and sd or the distributions themselves to combine them.
+#all cells with have a mean and sd associated with them. This will incorporate uncertainty into the model of soil depth.
+
+#assign a confidence to each measurement, using a normal distribution.
+
+#scott dataset 1, converting uniform distribution to a normal
+u1 <- runif(10000, min = 0, max = 1)
+u2 <- runif(10000, min = 0, max = 1)
+z1 <- sqrt(-2 * log(u1)) * sin(2*3.14*u2)
+z2 <- sqrt(-2 * log(u2)) * sin(2*3.14*u1)
+hist(u1)
+hist(z1)
+
+```
+
 
