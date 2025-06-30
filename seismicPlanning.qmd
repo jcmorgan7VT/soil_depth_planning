@@ -15,7 +15,9 @@ Gathering datasets to use to plan where seismic measurements will be made.
 library(pacman)
 p_load(tidyverse, sp, mapview, tmap, stars,
        lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
-       terra,  tidyterra)
+       terra,  tidyterra, mapview)
+
+crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
 #watershed shapes to clip and mask by
 sheds <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_wsheds')
@@ -33,24 +35,26 @@ plot(w3_stream) #currently in NAD83
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
 plot(w3_regime) #currently in NAD83
 #most recent soil map
-soil <- terra::rast("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.380.2&entityid=f083871fa0116b17b7398ca48eac7627")
+#https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
+soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
 plot(soil) #currently in NAD83
 #locations and depths of soil pits, archive entry from Scott
 #https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.210.2
-scott <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=42d7e94aea392080e7c40877c9a5df83")
+scott <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/42d7e94aea392080e7c40877c9a5df83")
 #classifies depth with a classification column
 #1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
 #does not include soil pits from lateral weathering drive, I think
+#check this link, I think it is wrong 6/17/24
 scott2 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=71688e053357f602e2b118055ff72c30")
 #lat weathering pedons
 lat_locs <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=bb91029a464278a2e47451aafec435c2")
 lat_depth <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=cca9cc4a0a7218d0602aede8f3f8697e")
 #GPR results
 
-#well locations with associated depth
+#groundwater well locations with associated depth
 #metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.161.4
 #depth in cm
-wells <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=1549ca484d74e547def10197e8c502dc")
+wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4/1549ca484d74e547def10197e8c502dc")
 #also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
 #outcrops, from 1994 geologic map
 rocks <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops')
@@ -74,13 +78,13 @@ mask_dem <- mask(crop_dem, w3)
 #wells
 wells_vect <- vect(wells, geom=c("Longitude", "Latitude"), crs="epsg:4326", keepgeom=FALSE)
 wells_vect_proj <- project(wells_vect, crs(dem))
-plot(wells_vect_proj)
+plot(wells_vect)
 wells_rast <- rasterize(wells_vect_proj, mask_dem, field = "Max_depth", fun = "mean")
 plot(wells_rast)
 
 #soils pits
 scott <- mutate(scott, depth = depthclass * 25)
-scott_vect <- vect(scott, geom=c("easting", "northing"), crs=crs(dem), keepgeom=FALSE)
+scott_vect <- vect(scott, geom=c("easting", "northing"), crs=crs1, keepgeom=FALSE)
 plot(scott_vect)
 # Create new column filled with default colour
 scott_vect$Colour="black"
@@ -133,4 +137,175 @@ hist(z1)
 
 ```
 
+
+```{r}
+# 6/12/24
+#trying to find locations where we know how deep it is to take seismic measurements.
+#randomly sample Scott's soil pits, just to see how well they do with some deep and shallow depth classes
+
+deep <- scott %>% filter(grepl("WS3", pedon)) %>% 
+  sample_n(20, replace = FALSE)
+
+shallow <- scott %>% filter(depthclass == 1) %>% 
+  sample_n(10, replace = FALSE)
+
+all <- rbind(deep, shallow)
+write.csv(deep, "soildepth_test_sample.csv")
+```
+
+```{r}
+# 6/17/24
+#read in cone pond pedons
+cone <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=9ce4f5893bdd16914d116fe38486a01c")
+#cone pond pedon descriptions
+desc0 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=7928b6c41dbbd09b52ffa041443087f6")
+
+scott2 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=bb91029a464278a2e47451aafec435c2")
+#subsetting for examples of Inceptisol descriptions
+incept <- scott %>% filter(hpu == "I")
+incept2 <- scott2 %>% filter(hpu == "I")
+incept3 <- cone %>% filter(hpu == "I")
+
+#read in pedon descriptions
+desc1 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=407e3b6b8b88aaf095f15efeb865efd6")
+
+lat <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=cca9cc4a0a7218d0602aede8f3f8697e")
+
+desc0 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=7928b6c41dbbd09b52ffa041443087f6")
+
+#filter descriptions for Inceptisol horizons
+info <- filter(desc1, pedon %in% incept$pedon)
+info2 <- filter(lat, pedon %in% incept2$pedon)
+info3 <- filter(desc0, pedon %in% incept3$pedon)
+
+write.csv(info, "HB_inceptisols.csv")
+write.csv(incept, "incept_locs.csv")
+
+write.csv(info2, "LatWeathering_Inceptisols.csv")
+write.csv(info3, "ConePond_Inceptisols.csv")
+
+head(info2)
+```
+
+```{r}
+# 7/10/24
+# making figure for coop meeting- failed, had to make it in arc
+seis2 <- read_csv("HVSR_7_24.csv")
+
+seis <- seis2 %>% 
+  select(grilla_number, lat, long, quality, depth) %>% 
+  filter(quality != "not sesame")
+seis$depth <- as.numeric(seis$depth)
+write_csv(seis, "HVSR_for_arc.csv")
+
+seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE)
+seis_vect_p <- project(seis_vect, crs(w3))
+
+ggplot()+
+  geom_spatvector(data = w3)+
+  geom_point(data=seis, aes(x = long, y = lat, color = depth))
+
+
+```
+
+```{r}
+# 7/13/24
+# making figure for Kevin of the dynamic nature of throughflow
+# use pour point to get DEM, and calculate watershed boundary
+# pour point of w3
+w3_coords <- c(281543.36, 4870433.54)
+#create pour point shapefile
+#make dataframe
+pourpoint <- data.frame("easting" = c(w3_coords[1]),
+                        "northing" = c(w3_coords[2]))
+pourpoint_vect <- vect(pourpoint, geom=c("easting", "northing"), crs="epsg:26919", keepgeom=FALSE)
+
+
+```
+
+```{r}
+# 7/18/24
+# redoing calibration curve
+cali <- read_csv("calicurve_wells.csv")
+all_cali <- read_csv("all_cali.csv")
+
+plot(cali$freq, cali$depth)
+model <- lm(log(cali$depth)~log(cali$freq))
+
+
+#calculate what the shear wave velocity should be
+cali$Vs <- cali$freq * 4 * cali$depth
+summary(cali$Vs)
+
+#plot showing only well calibration sites
+cali %>% 
+  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
+  unique() %>% 
+ggplot(aes(x = log(avg), y = log(depth)))+
+  geom_point()+
+  geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
+  geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
+              linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Just well calibration sites",
+       x = "Ln of Peak Resonance Frequency (Hz)",
+       y = "Ln Depth to bedrock (m)")
+
+#well calibration not in log scale
+model_lm <- lm((cali$depth)~(cali$freq))
+
+cali %>% 
+  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
+  unique() %>% 
+ggplot(aes(x = (avg), y = (depth)))+
+  geom_point()+
+  geom_errorbar(aes(xmin=(avg-sd), xmax=(avg+sd)))+
+  geom_abline(intercept = model_lm$coefficients[1],slope = model_lm$coefficients[2],
+              linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Well calibration sites",
+       x = "Peak Resonance Frequency (Hz)",
+       y = "Depth to bedrock (m)")
+
+#plot showing all calibration sites
+all_cali %>% 
+  select(h_v_max, 'max depth', type, quality) %>% 
+  rename(depth = 'max depth') %>% 
+  na.omit() %>% 
+  filter(depth != 12) %>% 
+ggplot()+
+  geom_point(aes(x = h_v_max, y =  depth, color = type))+
+  theme_classic()+
+  labs(title = "All calibration sites",
+       x = "Peak Resonance Frequency (Hz)",
+       y = "Depth to bedrock (m)")
+  # scale_x_continuous(trans='log2')+
+  # scale_y_continuous(trans='log2')
+
+#plot showing only the highest quality measurements
+  all_cali %>% 
+  select(h_v_max, 'max depth', type, quality) %>% 
+  rename(depth = 'max depth') %>% 
+  na.omit() %>% 
+  filter(depth != 12) %>% 
+  filter(quality == "yes") %>% 
+ggplot(aes(x = h_v_max, y =  depth))+
+  geom_point(aes(color = type))+
+    geom_smooth(method = 'lm', se = FALSE)+
+    theme_classic()+
+  labs(title = "Only high confidence calibration sites",
+       x = "Peak Resonance Frequency (Hz)",
+       y = "Depth to bedrock (m)")
+  
+good <-   all_cali %>% 
+  select(h_v_max, 'max depth', type, quality, Vs_min, Vs_max) %>% 
+  rename(depth = 'max depth') %>% 
+  na.omit() %>% 
+  filter(depth != 12) %>% 
+  filter(quality == "yes") 
+  
+mean(good$Vs_min)
+```
 
