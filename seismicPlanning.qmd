@@ -8,7 +8,6 @@ editor_options:
 
 ## Seismic field plan for summer 24
 
-
 Gathering datasets to use to plan where seismic measurements will be made.
 
 ```{r}
@@ -19,19 +18,26 @@ p_load(tidyverse, sp, mapview, tmap, stars,
 
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
+# GIS files working directory
+arsenal <- "/Users/johnmorgan/Documents/VT Research/HBTopmodel"
 #watershed shapes to clip and mask by
-sheds <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_wsheds')
-#method to subset shapefiles- use base r ways to subset
-w3 <- sheds[2,]
-plot(w3) #currently in NAD83
-#topography- 1m hydro enforced DEM
-dem <- terra::rast("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.211.2&entityid=6a86dae0381906a86ec617385f11c91f")
+#watershed boundary
+w3_shed <- paste0(arsenal, "/w3_dems/w3_shed.tif")
+w3_outline <- as.polygons(rast(w3_shed), extent=FALSE)
+plot(w3_outline)
+
+#topography- 1m hydro enforced DEM of the whole valley
+#previously downloaded
+dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
+dem <- terra::rast(dem_location)
 plot(dem) #currently in NAD83
+
 #accurate flowlines of network
 #using Carrie's flowlines
-w3_stream <- vect("~/Documents/VT Research/HBTopModel/HB/hbstream/hb42_master_startend.shp")
+w3_stream <- vect(paste0(arsenal, "/HB/hbstream/hb42_master_startend.shp"))
 plot(w3_stream) #currently in NAD83
 #classified stream map that scott sent me
+
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
 plot(w3_regime) #currently in NAD83
 #most recent soil map
@@ -45,10 +51,10 @@ scott <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2
 #1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
 #does not include soil pits from lateral weathering drive, I think
 #check this link, I think it is wrong 6/17/24
-scott2 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=71688e053357f602e2b118055ff72c30")
+scott2 <- read_csv()
 #lat weathering pedons
-lat_locs <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=bb91029a464278a2e47451aafec435c2")
-lat_depth <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=cca9cc4a0a7218d0602aede8f3f8697e")
+lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/bb91029a464278a2e47451aafec435c2")
+lat_depth <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/cca9cc4a0a7218d0602aede8f3f8697e")
 #GPR results
 
 #groundwater well locations with associated depth
@@ -60,14 +66,34 @@ wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4
 rocks <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops')
 plot(rocks)
 #soil depth from valley wide veg plots, from battles and fahey
-fahey <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.121.5&entityid=d2a6900ad5470d00dce0d7fa0bca3eec")
+#https://www.proquest.com/docview/304689277?pq-origsite=gscholar&fromopenview=true&sourcetype=Dissertations%20&%20Theses
+# measured soil depth by inserting a steel probe until obstruction was encountered
+fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec")
+
+ggplot(fahey, aes(x = UTM_EASTING, y = UTM_NORTHING, color = MEAN))+
+  geom_point()
 #seismic measurements from last summer
+seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y9cm_KP4eASWoAppsooTLick/edit?gid=744520605#gid=744520605",
+                    sheet = "combined") %>% 
+  select(grilla_number, lat, long, quality, depth) %>% 
+  filter(quality != "not sesame") %>% 
+  filter(depth != "#DIV/0") %>% 
+  mutate(depth = as.numeric(depth)) %>% 
+  na.omit()
+seis$depth <- as.numeric(seis$depth)
+
+seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE)
+#seis_vect_p <- project(seis_vect, crs(w3))
 
 #cody gillin bedrock outcrop maps
 
 #Ksat measurements in W3
 ksat <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.364.1&entityid=1716abc55e229147fe45d60cbe7a4b65")
 
+# Lat weathing rock https://drive.google.com/drive/folders/12HvDyet8GgEi490Ms0cnigfCRlMjnurT
+#delineated rocky areas for Scott's 2019 paper
+lat_rock <- vect("./ws3bedrock_latweathering/ws3bdrclip.shp")
+plot(lat_rock)
 ```
 
 ```{r}
@@ -136,7 +162,6 @@ hist(u1)
 hist(z1)
 
 ```
-
 
 ```{r}
 # 6/12/24
@@ -308,4 +333,3 @@ good <-   all_cali %>%
   
 mean(good$Vs_min)
 ```
-
