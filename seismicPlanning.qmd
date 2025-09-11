@@ -22,45 +22,69 @@ crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        
 arsenal <- "/Users/johnmorgan/Documents/VT Research/HBTopmodel"
 #watershed shapes to clip and mask by
 #watershed boundary
-w3_shed <- paste0(arsenal, "/w3_dems/w3_shed.tif")
-w3_outline <- as.polygons(rast(w3_shed), extent=FALSE)
+w3_shed_location <- paste0(arsenal, "/w3_dems/w3_shed.tif")
+w3_outline <- as.polygons(rast(w3_shed_location), extent=FALSE)
 plot(w3_outline)
 
 #topography- 1m hydro enforced DEM of the whole valley
 #previously downloaded
 dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
 dem <- terra::rast(dem_location)
-plot(dem) #currently in NAD83
-
+crop_dem <- crop(dem, w3_outline)
+mask_dem <- mask(crop_dem, w3_outline)
+plot(mask_dem) #currently in NAD83
 #accurate flowlines of network
 #using Carrie's flowlines
 w3_stream <- vect(paste0(arsenal, "/HB/hbstream/hb42_master_startend.shp"))
-plot(w3_stream) #currently in NAD83
+
+w3_stream <- crop(w3_stream, w3_outline) #currently in NAD83
 #classified stream map that scott sent me
 
+# Think I will use Carrie's stream network instead of Scott's
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
 plot(w3_regime) #currently in NAD83
 #most recent soil map
 #https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
 soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
-plot(soil) #currently in NAD83
+crop_soil <- crop(soil, w3_outline)
+mask_soil <- mask(crop_soil, w3_outline)
+plot(mask_soil) #currently in NAD83
 #locations and depths of soil pits, archive entry from Scott
 #https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.210.2
 scott <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/42d7e94aea392080e7c40877c9a5df83")
+scott_vect <- vect(scott, geom = c("easting", "northing"), crs = crs1)
+scott_vect <- crop(scott_vect, w3_outline)
+plot(scott_vect)
+
 #classifies depth with a classification column
 #1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
 #does not include soil pits from lateral weathering drive, I think
 #check this link, I think it is wrong 6/17/24
-scott2 <- read_csv()
+#scott2 <- read_csv()
 #lat weathering pedons
-lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/bb91029a464278a2e47451aafec435c2")
-lat_depth <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/cca9cc4a0a7218d0602aede8f3f8697e")
+lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/bb91029a464278a2e47451aafec435c2") %>% 
+  filter(base == "R")
+lat_depth <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/cca9cc4a0a7218d0602aede8f3f8697e") 
+just_depths <- lat_depth %>% 
+  select(pedon, base_cm) %>% 
+  group_by(pedon) %>% 
+  summarize(depth = max(base_cm))
+
+lat_hit_rock <- lat_locs %>% 
+  left_join(just_depths, by = "pedon") %>% 
+  select(pedon, easting, northing, depth) %>% 
+  vect(., geom = c("easting", "northing"), crs = crs1)
+plot(lat_hit_rock)
 #GPR results
 
 #groundwater well locations with associated depth
 #metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.161.4
 #depth in cm
-wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4/1549ca484d74e547def10197e8c502dc")
+wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4/1549ca484d74e547def10197e8c502dc") %>% 
+  vect(., geom = c("Longitude", "Latitude"), crs = "epsg:4326") %>% 
+  terra::project(., crs(w3_outline)) 
+
+plot(wells)
 #also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
 #outcrops, from 1994 geologic map
 rocks <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops')
@@ -68,10 +92,12 @@ plot(rocks)
 #soil depth from valley wide veg plots, from battles and fahey
 #https://www.proquest.com/docview/304689277?pq-origsite=gscholar&fromopenview=true&sourcetype=Dissertations%20&%20Theses
 # measured soil depth by inserting a steel probe until obstruction was encountered
-fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec")
+# DOES NOT HAVE MEASUREMENTS IN W3
+# fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec") %>% vect(., geom = c("UTM_EASTING", "UTM_NORTHING"), crs = crs1)
+# plot(fahey)
+# plot(w3_outline, add = TRUE)
+# plot(crop(fahey, w3_outline))
 
-ggplot(fahey, aes(x = UTM_EASTING, y = UTM_NORTHING, color = MEAN))+
-  geom_point()
 #seismic measurements from last summer
 seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y9cm_KP4eASWoAppsooTLick/edit?gid=744520605#gid=744520605",
                     sheet = "combined") %>% 
@@ -82,13 +108,13 @@ seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y
   na.omit()
 seis$depth <- as.numeric(seis$depth)
 
-seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE)
-#seis_vect_p <- project(seis_vect, crs(w3))
-
-#cody gillin bedrock outcrop maps
+seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE) %>% 
+  terra::project(crs(w3_outline))
+plot(seis_vect)
 
 #Ksat measurements in W3
-ksat <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.364.1&entityid=1716abc55e229147fe45d60cbe7a4b65")
+# Has depth associated with it but I am not sure that it is actually helpful
+# ksat <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/364/1/1716abc55e229147fe45d60cbe7a4b65")
 
 # Lat weathing rock https://drive.google.com/drive/folders/12HvDyet8GgEi490Ms0cnigfCRlMjnurT
 #delineated rocky areas for Scott's 2019 paper
@@ -96,10 +122,22 @@ lat_rock <- vect("./ws3bedrock_latweathering/ws3bdrclip.shp")
 plot(lat_rock)
 ```
 
+Right now, I have 6 sources of depth data:
+- My seismic measurements
+- Scott's soil pedons
+- Lateral weathering pedons
+- Scott's bedrock outcrop extent
+- Rock outcrops from 1994 geologic map
+- GW well depths
+- Soil model (not sure how useful though)
+
+Additional datasets I want/need to add:
+- My observations of bedrock outcrops
+- Georeferenced GPR cross sections and weasel road
+
 ```{r}
 #now that I have all of these datasets, I need to clip them to the extent of watershed 3
-crop_dem <- crop(dem, w3)
-mask_dem <- mask(crop_dem, w3)
+
 
 #wells
 wells_vect <- vect(wells, geom=c("Longitude", "Latitude"), crs="epsg:4326", keepgeom=FALSE)
