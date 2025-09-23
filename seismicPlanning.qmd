@@ -14,7 +14,7 @@ Gathering datasets to use to plan where seismic measurements will be made.
 library(pacman)
 p_load(tidyverse, sp, mapview, tmap, stars,
        lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
-       terra,  tidyterra, mapview)
+       terra,  tidyterra, mapview, ggnewscale)
 
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
@@ -56,6 +56,16 @@ scott_vect <- vect(scott, geom = c("easting", "northing"), crs = crs1)
 scott_vect <- crop(scott_vect, w3_outline)
 plot(scott_vect)
 
+scott_horizons <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/407e3b6b8b88aaf095f15efeb865efd6")
+
+scott_rocks <- scott_horizons %>% 
+  filter(horizon == "R") %>% 
+  left_join(scott, by = "pedon") %>% 
+  select(top_cm, easting, northing) %>% 
+  rename(depth = top_cm) %>% 
+  mutate(depth = depth/100) %>% 
+  vect(., geom = c("easting", "northing"), crs = crs1) %>% 
+  crop(., w3_outline)
 #classifies depth with a classification column
 #1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
 #does not include soil pits from lateral weathering drive, I think
@@ -64,41 +74,60 @@ plot(scott_vect)
 #lat weathering pedons
 lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/bb91029a464278a2e47451aafec435c2") %>% 
   filter(base == "R")
+#unsure if filtering just by base == R is enough, or if I should also filter to horizon == R
 lat_depth <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/cca9cc4a0a7218d0602aede8f3f8697e") 
 just_depths <- lat_depth %>% 
   select(pedon, base_cm) %>% 
   group_by(pedon) %>% 
   summarize(depth = max(base_cm))
 
-lat_hit_rock <- lat_locs %>% 
+lat_hit_rock <- 
+  lat_locs %>% 
   left_join(just_depths, by = "pedon") %>% 
-  select(pedon, easting, northing, depth) %>% 
-  vect(., geom = c("easting", "northing"), crs = crs1)
+  select(easting, northing, depth) %>% 
+  vect(., geom = c("easting", "northing"), crs = crs1) %>% 
+  mutate(depth = depth/100)
+
+
 plot(lat_hit_rock)
 #GPR results
 
 #groundwater well locations with associated depth
 #metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.161.4
 #depth in cm
-wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4/1549ca484d74e547def10197e8c502dc") %>% 
+wells <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/161/4/1549ca484d74e547def10197e8c502dc") 
+wells <- wells %>% mutate(Well_ID = toupper(Well_ID))
+
+wells_depth <- read_csv("gw_wells_depth_to_rock.csv") %>% 
+  rename(depth = "Depth to rock (m)",
+         Well_ID = Name) %>% 
+  select(Well_ID, depth) %>% 
+  filter(depth != "-") %>% 
+  mutate(depth = as.numeric(depth))
+wells_vect <- wells %>% 
+  left_join(wells_depth, by = "Well_ID") %>% 
+  select(Latitude, Longitude, depth) %>%
+  drop_na() %>% 
   vect(., geom = c("Longitude", "Latitude"), crs = "epsg:4326") %>% 
   terra::project(., crs(w3_outline)) 
-
-plot(wells)
+# turns out there are only 4 deep wells with the depth associated...
+plot(wells_vect)
 #also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
 #outcrops, from 1994 geologic map
-rocks <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops')
-plot(rocks)
-#soil depth from valley wide veg plots, from battles and fahey
-#https://www.proquest.com/docview/304689277?pq-origsite=gscholar&fromopenview=true&sourcetype=Dissertations%20&%20Theses
-# measured soil depth by inserting a steel probe until obstruction was encountered
-# DOES NOT HAVE MEASUREMENTS IN W3
-# fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec") %>% vect(., geom = c("UTM_EASTING", "UTM_NORTHING"), crs = crs1)
-# plot(fahey)
-# plot(w3_outline, add = TRUE)
-# plot(crop(fahey, w3_outline))
+rocks_1994 <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops') %>% 
+  crop(w3_outline)
+# Other geologic map: 
+# https://pubs.usgs.gov/of/2000/of00-045/of0045p1.pdf
 
-#seismic measurements from last summer
+john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>% 
+  select(lat, long) %>% 
+  mutate(depth = as.numeric(0),
+         source = "john_outcrops") %>% 
+  vect(., geom = c("long", "lat"), crs = "epsg:4326") %>% 
+    terra::project(., crs(w3_outline)) 
+
+
+######### My passive seismic measurements #########
 seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y9cm_KP4eASWoAppsooTLick/edit?gid=744520605#gid=744520605",
                     sheet = "combined") %>% 
   select(grilla_number, lat, long, quality, depth) %>% 
@@ -112,14 +141,55 @@ seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE) 
   terra::project(crs(w3_outline))
 plot(seis_vect)
 
-#Ksat measurements in W3
-# Has depth associated with it but I am not sure that it is actually helpful
-# ksat <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/364/1/1716abc55e229147fe45d60cbe7a4b65")
+######### 2019 REU auger investigation #########
+# unclear what the best way to filter it will be...
+read_csv("auger_depths.csv") %>% 
+  rename(Site = "Site Name",
+         Sub = "Subwatershed",
+         interface = "Bottom Interface") %>% 
+  left_join(read_csv("auger_locations_topo.csv"), by = c("Sub", "Site")) %>% 
+  filter(interface == "R",
+         Horizon == "R") %>% 
+  select(Sub, Site, 'Top (cm)', x, y)
+
+#filter 2019 auger investigation to just bedrock depths
+auger <- read_csv("auger_depths.csv") %>% 
+  rename(Site = "Site Name",
+         Sub = "Subwatershed",
+         interface = "Bottom Interface",
+         top_cm = "Top (cm)") %>% 
+  left_join(read_csv("auger_locations_topo.csv"), by = c("Sub", "Site")) %>% 
+  filter(interface == "R") %>% 
+  select(Sub, Site, top_cm, x, y) %>%
+  group_by(Site, x, y, Sub) %>% 
+  summarise(depth = max(top_cm)/100) %>% 
+  ungroup() %>% 
+  select(x, y, depth) %>% 
+  mutate(source = "2019_auger") %>% 
+    vect(., geom = c("x", "y"), crs = crs1)
+
+```
+```{r unused-datasets}
+#soil depth from valley wide veg plots, from battles and fahey
+#https://www.proquest.com/docview/304689277?pq-origsite=gscholar&fromopenview=true&sourcetype=Dissertations%20&%20Theses
+# measured soil depth by inserting a steel probe until obstruction was encountered
+# DOES NOT HAVE MEASUREMENTS IN W3
+# fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec") %>% vect(., geom = c("UTM_EASTING", "UTM_NORTHING"), crs = crs1)
+# plot(fahey)
+# plot(w3_outline, add = TRUE)
+# plot(crop(fahey, w3_outline))
+
 
 # Lat weathing rock https://drive.google.com/drive/folders/12HvDyet8GgEi490Ms0cnigfCRlMjnurT
 #delineated rocky areas for Scott's 2019 paper
 lat_rock <- vect("./ws3bedrock_latweathering/ws3bdrclip.shp")
-plot(lat_rock)
+plot(w3_outline)
+plot(lat_rock, add = TRUE)
+
+#Ksat measurements in W3
+# Has depth associated with it but I am not sure that it is actually helpful
+# ksat <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/364/1/1716abc55e229147fe45d60cbe7a4b65")
+
 ```
 
 Right now, I have 6 sources of depth data:
@@ -134,6 +204,234 @@ Right now, I have 6 sources of depth data:
 Additional datasets I want/need to add:
 - My observations of bedrock outcrops
 - Georeferenced GPR cross sections and weasel road
+
+Make a map showing all of the datasets:
+```{r}
+#basemap of W3
+plot(w3_outline)
+plot(w3_stream, add = TRUE)
+#w3_shed_location <- paste0(arsenal, "/w3_dems/w3_shed.tif")
+plot(scott_vect, add = TRUE)
+plot(lat_hit_rock, add = TRUE)
+plot(wells, add = TRUE)
+plot(rocks, add = TRUE)
+plot(seis_vect, add = TRUE)
+plot(lat_rock, add = TRUE)
+
+#normalize all datasets, plot together
+scott_vect_norm <- scott_vect %>% 
+  mutate(depth = depthclass * 0.25,
+         source = "Scott Pedon Descriptions") %>% 
+  select(depth, source)
+lat_hit_rock_norm <- 
+  lat_hit_rock %>% 
+  mutate(depth = depth/100,
+         source = "LatW. Pedon Descriptions") %>% 
+  select(depth, source)
+names(wells)
+wells_norm <- wells %>% 
+  mutate(depth = Max_depth/100,
+         source = "GW wells") %>% 
+  select(depth, source)
+rocks_norm <- rocks %>% 
+  mutate(depth = 0,
+         source = "1994 Geologic Map outcrops") %>% 
+  select(depth, source)
+
+seis_vect_norm <- seis_vect %>% 
+  mutate(source = "TROMINO seismic") %>% 
+  select(depth, source)
+
+combin_norm <- rbind(seis_vect_norm, rocks_norm, 
+      wells_norm, lat_hit_rock_norm, scott_vect_norm) 
+
+  
+ggplot()+
+  geom_sf(data = w3_outline, fill = NA, alpha = 0.3, lwd = 1)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+  
+  scale_fill_gradient(high = "#27408B", low = "white")+
+  facet_wrap(~source)+
+  theme_classic()#+
+  #geom_sf(data = w3_pour, colour = "black") +
+   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA))
+                              
+
+lat_rock # a polygon, not sure how to show in addition to other data sources
+```
+
+Actual time to krig
+- my seismic measurements
+- 2019 depth surveys that hit rock
+- wells that hit rock
+- soil pits that hit rock
+- my observations of bedrock outcrops
+- geologic map outcrops
+```{r}
+# chunk to create depth shapefile, of points with appropriate information
+# start with just my seismic measurements
+all_sources <-
+rbind(
+#seis_sf2 <- 
+  seis %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+  rename(depth = mean_depth) %>% 
+  select(depth) %>% 
+  mutate(source = "seismic"),
+
+
+st_as_sf(wells_vect) %>% 
+  mutate(source = "gw_wells"),
+
+st_as_sf(lat_hit_rock) %>% 
+  mutate(source = "lat_weathering"),
+
+st_as_sf(scott_rocks) %>% 
+  mutate(source = "scott_pedons"),
+
+st_as_sf(rocks_1994) %>% 
+  mutate(source = "rocks_1994",
+         depth = as.numeric(0)) %>% 
+  select(depth, geometry, source),
+
+st_as_sf(john_rocks))
+
+# input to kriging needs to be an sf object
+```
+
+
+```{r}
+# chunk that will run the variogram calculation and run kriging model
+
+# create the empty grid to hold the output of kriging
+st_bbox(w3_outline) |>
+  st_as_stars(dx = 5) -> grd
+
+# calculate the sample variogram
+v <- variogram(depth~1, all_sources)
+# plot semivariogram
+plot(v, plot.numbers = TRUE, xlab = "distance h [m]",
+     ylab = expression(gamma(h)),
+     xlim = c(0, 1.055 * max(v$dist)))
+
+# fit a model/variogram to the data
+v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
+plot(v, v.m, plot.numbers = TRUE) ## draws a single model; draw 2 models in single plot:
+# use variogram model to krig
+k <- krige(depth~1, all_sources, grd, v.m)
+
+# plot the output
+ggplot() + 
+      geom_sf(data = seis_sf, size = 0.5) +
+
+  geom_stars(data = k, aes(fill = var1.pred, x = x, y = y)) + 
+  #scale_fill_viridis_c()+
+  xlab(NULL) + ylab(NULL) +
+
+  #geom_sf(data = st_cast(de, "MULTILINESTRING")) + 
+  
+  coord_sf(lims_method = "geometry_bbox")
+```
+
+```{r W3-map}
+#map of watershed 3 with depth to bedrock
+hillshade_location <- paste0(arsenal, "/w3_dems/1mdem_hillshade.tif")
+hill <- rast(hillshade_location) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+
+#ybounds <- c(4870350,4871350)
+#xbounds <- c(281350, 282150)
+#crop to rectangular area
+#crop1 <- crop(m1, ext(c(xbounds, ybounds)))
+#writeRaster(crop1, "1mdemw3_cropped.tif")
+plot(mask_dem)
+k_terra <- rast(k) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline) %>% 
+  select(var1.pred_var1.pred)
+plot(k_terra$var1.pred_var1.pred)
+#watershed boundary
+
+plot(w3_outline)
+#expanse(w3_outline)
+
+plot(w3_stream)
+
+#point locations- snapped points from above chunk
+#w3_stic_locs_snap <- "w3_stic_locs_snap.shp"
+
+# w3_stic_locs_r <- vect(w3_stic_locs_snap) %>% 
+#   left_join(pks_w3, by = "ID")
+
+
+
+#w3_stic_locs_r <- vect(w3_stic_locs_snap)
+#writeVector(w3_stic_locs_r, "./seismic_map_exports/w3_stic_locs_snap.shp")
+
+
+
+ggplot()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
+  scale_fill_viridis_c(na.value = "transparent", alpha = 0.7, name = "Depth (m)")+
+    geom_sf(data = w3_stream, colour = "lightgray") +
+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))
+
+ggplot()+
+  
+  theme_void()+
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
+    scale_fill_continuous(na.value = "transparent", name = "Depth (m)", trans = "reverse")+
+  #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))
+
+# old map from other workind dir that I copied to here
+# w3_map_f1 <- 
+#   ggplot()+
+#   geom_spatraster(data = hill)+
+#   theme_void()+
+#   #theme(legend.position = "")+
+#   scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+#                        guide = "none")+
+#     new_scale_fill() +
+#   #geom_spatraster(data = crop1, alpha = 0.5)+
+#   geom_sf(data = w3_outline, fill = NA, color = "#FFD166", alpha = 0.3, lwd = 2)+
+#   geom_sf(data = w3_net, colour = "#9AC0CD", lwd = 2) +
+#   geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
+#   #geom_sf(data = dd, aes(color = (depth)), pch = 19, size = 3) +
+#   scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
+#   #geom_sf(data = w3_pour, colour = "black") +
+#    #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+#   #theme(rect = element_rect(fill = "transparent", color = NA))+
+#   ggspatial::annotation_scale(location = 'tr',
+#                               pad_x = unit(0.4, "cm"),
+#                               pad_y = unit(1, "cm"))
+#                               
+# w3_map_f1
+# ggsave("w3_map_f1f.png", w3_map_f1 )
+
+```
+
 
 ```{r}
 #now that I have all of these datasets, I need to clip them to the extent of watershed 3
