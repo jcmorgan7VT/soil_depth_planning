@@ -10,7 +10,7 @@ editor_options:
 
 Gathering datasets to use to plan where seismic measurements will be made.
 
-```{r}
+```{r setup-and-formatting-input-data}
 library(pacman)
 p_load(tidyverse, sp, mapview, tmap, stars,
        lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
