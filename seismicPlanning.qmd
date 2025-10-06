@@ -18,24 +18,38 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        gstat, # Variogram and krig functions
        spatialEco # Curvature function
        )
-
+# Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
 # GIS files working directory
 arsenal <- "/Users/johnmorgan/Documents/VT Research/HBTopmodel"
+# Shed outline, stream network and DEM prep ####
 #watershed shapes to clip and mask by
 #watershed boundary
 w3_shed_location <- paste0(arsenal, "/w3_dems/w3_shed.tif")
 w3_outline <- as.polygons(rast(w3_shed_location), extent=FALSE)
 plot(w3_outline)
 
-#topography- 1m hydro enforced DEM of the whole valley
-#previously downloaded
+#topography- 1m bare earth DEM of the whole valley
+## starting here so that when I use fill command later, it will yield depressional storage
 dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
-dem <- terra::rast(dem_location)
-crop_dem <- crop(dem, w3_outline)
-mask_dem <- mask(crop_dem, w3_outline)
-plot(mask_dem) #currently in NAD83
+dem1 <- rast(dem_location) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+dem10 <- aggregate(rast(dem_location), 10) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+#save raster, because whitebox wants it is a files location instead of an object in R
+dem10_location <- paste0(arsenal, "/w3_dems/10mdem.tif")
+dem1_location <- paste0(arsenal, "/w3_dems/1mdem.tif")
+
+writeRaster(dem10, dem10_location, overwrite = TRUE)
+writeRaster(dem1, dem1_location, overwrite = TRUE)
+
+
+plot(dem10)
+plot(dem1)
+
 #accurate flowlines of network
 #using Carrie's flowlines
 w3_stream <- vect(paste0(arsenal, "/HB/hbstream/hb42_master_startend.shp"))
@@ -46,6 +60,8 @@ w3_stream <- crop(w3_stream, w3_outline) #currently in NAD83
 # Think I will use Carrie's stream network instead of Scott's
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
 plot(w3_regime) #currently in NAD83
+
+# Read in data sources ####
 #most recent soil map
 #https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
 soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
@@ -130,7 +146,7 @@ john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>%
     terra::project(., crs(w3_outline)) 
 
 
-######### My passive seismic measurements #########
+## My passive seismic measurements #########
 seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y9cm_KP4eASWoAppsooTLick/edit?gid=744520605#gid=744520605",
                     sheet = "combined") %>% 
   select(grilla_number, lat, long, quality, depth) %>% 
@@ -144,7 +160,7 @@ seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE) 
   terra::project(crs(w3_outline))
 plot(seis_vect)
 
-######### 2019 REU auger investigation #########
+## 2019 REU auger investigation #########
 # unclear what the best way to filter it will be...
 read_csv("auger_depths.csv") %>% 
   rename(Site = "Site Name",
@@ -195,71 +211,15 @@ plot(lat_rock, add = TRUE)
 
 ```
 
-Right now, I have 6 sources of depth data:
-- My seismic measurements
-- Scott's soil pedons
-- Lateral weathering pedons
-- Scott's bedrock outcrop extent
-- Rock outcrops from 1994 geologic map
-- GW well depths
-- Soil model (not sure how useful though)
 
-Additional datasets I want/need to add:
-- My observations of bedrock outcrops
-- Georeferenced GPR cross sections and weasel road
-
-old formatting chunk
-```{r}
-#basemap of W3
-plot(w3_outline)
-plot(w3_stream, add = TRUE)
-#w3_shed_location <- paste0(arsenal, "/w3_dems/w3_shed.tif")
-plot(scott_vect, add = TRUE)
-plot(lat_hit_rock, add = TRUE)
-plot(wells, add = TRUE)
-plot(rocks, add = TRUE)
-plot(seis_vect, add = TRUE)
-plot(lat_rock, add = TRUE)
-
-#normalize all datasets, plot together
-scott_vect_norm <- scott_vect %>% 
-  mutate(depth = depthclass * 0.25,
-         source = "Scott Pedon Descriptions") %>% 
-  select(depth, source)
-lat_hit_rock_norm <- 
-  lat_hit_rock %>% 
-  mutate(depth = depth/100,
-         source = "LatW. Pedon Descriptions") %>% 
-  select(depth, source)
-names(wells)
-wells_norm <- wells %>% 
-  mutate(depth = Max_depth/100,
-         source = "GW wells") %>% 
-  select(depth, source)
-rocks_norm <- rocks %>% 
-  mutate(depth = 0,
-         source = "1994 Geologic Map outcrops") %>% 
-  select(depth, source)
-
-seis_vect_norm <- seis_vect %>% 
-  mutate(source = "TROMINO seismic") %>% 
-  select(depth, source)
-
-combin_norm <- rbind(seis_vect_norm, rocks_norm, 
-      wells_norm, lat_hit_rock_norm, scott_vect_norm) 
-
-
-                              
-```
-
-Actual time to krig
+6 sources of depth:
 - my seismic measurements
 - 2019 depth surveys that hit rock
 - wells that hit rock
 - soil pits that hit rock
 - my observations of bedrock outcrops
-- geologic map outcrops
-```{r}
+- 1994 geologic map outcrops
+```{r combine-inputs}
 # chunk to create depth shapefile, of points with appropriate information
 # start with just my seismic measurements
 all_sources <-
@@ -322,171 +282,49 @@ ggplot()+
         axis.line.y = element_blank())
 ```
 
-
-```{r}
-# chunk that will run the variogram calculation and run kriging model
-
-# create the empty grid to hold the output of kriging
-st_bbox(w3_outline) |>
-  st_as_stars(dx = 1) -> grd
-
-#grd <- mask_dem
-
-# Remove empty geometries
-which(st_is_empty(all_sources))
-all_sources <- all_sources[-which(st_is_empty(all_sources)),]
-# Remove missing depth values, all 3 are in auger dataset
-which(is.na(all_sources))
-all_sources <-all_sources[-which(is.na(all_sources)),]
-
-no_auger <- filter(all_sources, source != "2019_auger")
-
-# calculate the sample variogram
-v <- variogram(depth~1, no_auger)
-#v <- variogram(depth~1, all_sources, cutoff = 445.8491, width = 37.15409)
-
-# plot semivariogram
-plot(v, plot.numbers = TRUE, xlab = "distance h [m]",
-     ylab = expression(gamma(h)),
-     xlim = c(0, 1.055 * max(v$dist)))
-
-# fit a model/variogram to the data
-v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
-plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
-     ylab = expression(gamma(h)),
-     xlim = c(0, 1.055 * max(v$dist))) ## draws a single model; draw 2 models in single plot:
-# use variogram model to krig
-k <- krige(depth~1, all_sources, grd, v.m)
-```
-
 Krig again, but per Yang's suggestion exclude a validation dataset and use it to calculate RMSE
-```{r}
-st_bbox(w3_outline) |>
-  st_as_stars(dx = 10) -> grd
+```{r krig-with-split}
+# Krig with validation split
+# input params
+spatial_resolution <- 10 # meters
+split <- 0.8 # 80/20 for example
+number_of_classes <- 5 # number of classes for stratified random sampling
 set.seed(1)
-no_auger <- filter(all_sources, source != "2019_auger")
-df_form <- as_tibble(no_auger)
-df_form$group_equal_range <- cut(df_form$depth, breaks = 5, labels = FALSE)
 
+# define area for interpolation
+grd <- st_bbox(w3_outline) |>
+  st_as_stars(dx = spatial_resolution)
+
+# remove auger exploration
+no_auger <- filter(all_sources, source != "2019_auger")
+
+# create depth classes for stratified random sampling
+df_form <- as_tibble(no_auger)
+df_form$group_equal_range <- cut(df_form$depth, breaks = number_of_classes, labels = FALSE)
+
+# training versus validation split
 training <- df_form %>% 
   group_by(group_equal_range) %>% 
-  slice_sample(, prop = 0.8)
+  slice_sample(, prop = split)
 
 validation <- anti_join(df_form, training)
 training_sf <- st_as_sf(training)
 validation_vect <- vect(st_as_sf(validation))
-# calculate the sample variogram
+
+# calculate the sample variogram and experimental variogram
 v <- variogram(depth~1, training_sf)
 v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
+
+# run krige
 k <- krige(depth~1, training_sf, grd, v.m)
 
+# calculate RMSE using validation split, return it
 extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>% 
   as_tibble() %>% 
   summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
 
 ```
-```{r}
-plot(rast(k))
-dem10 <- rast("/Users/johnmorgan/Documents/VT Research/HB_data/hbef_10mdem/hbef_10mdem.tif") %>% 
-  crop(ext(w3_outline)) %>%
-  mask(ext(w3_outline))
-
-k_crop <- rast(k)$var1.pred_var1.pred %>% 
-  crop(ext(w3_outline)) %>%
-  mask(ext(w3_outline))
-
-k_resamp <- resample(k_crop, dem10, method = "bilinear")
-plot(dem10 - k_resamp)
-
-writeRaster(dem10 - k_resamp, "krig_output.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
-
-filled_krig_out <- "filled_krig.tif"
-
-wbt_fill_depressions(dem = "krig_output.tif",
-                     output = filled_krig_out)
-plot(rast(filled_krig_out) - dem10 + k_resamp, main = "10m surface depressions")
-plot(k_resamp, main = "10m subsurface depressions")
-```
-
-
-Try multivariate approach
-```{r topography-multivariate}
-#extract topographic values for each input data location
-combin_norm
-
-plot(curve5)
-
-extract(dem)
-#flow accumulation/drainage area
-mask_dem_location <- paste0(arsenal, "/w3_dems/1mdem_w3_masked.tif")
-fill_output <- "./w3_dems/10mdem_fill.tif"
-
-#flow accumulation/drainage area
-flowacc_output <- paste0(arsenal,"/w3_dems/10mdem_flowacc.tif")
-
-#Slope
-slope_output <- paste0(arsenal,"/w3_dems/10mdem_slope.tif")
-
-#calculate TPI
-tpi_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
-
-#TWI
-twi_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
-
-w3_uaa <- 
-  extract(rast(flowacc_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
-  rename("uaa" = `X10mdem_flowacc`) #%>% 
-  #as_tibble()
-
-w3_tpi <- extract(rast(tpi_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
-  rename("tpi" = `X10mdem_tpi`) %>% 
-  #as_tibble() %>% 
-  select(tpi)
-
-w3_twi <- extract(rast(twi_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
-  rename("twi" = `X10mdem_twi`) %>% 
-  #as_tibble() %>% 
-  select(twi)
-
-w3_slope <- extract(rast(slope_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
-  rename("slope" = `X10mdem_slope`) %>% 
-  #as_tibble() %>% 
-  select(slope)
-
-w3_topo <- bind_spat_cols(w3_uaa, w3_twi, w3_tpi, w3_slope)
-
-all_sources2 <- st_as_sf(w3_topo)
-which(st_is_empty(all_sources2))
-all_sources2 <- all_sources2[-which(st_is_empty(all_sources2)),]
-# Remove missing depth values, all 3 are in auger dataset
-which(is.na(all_sources2))
-all_sources2 <-all_sources2[-which(is.na(all_sources2)),]
-
-no_auger <- filter(all_sources2, source != "2019_auger")
-
-# Multivariate kriging
-hscat(log(depth) ~ 1, no_auger, (0:9) * 100)
-
- cok.maps <- predict(vm.fit, meuse.grid)
-# calculate the sample variogram
-v <- variogram(depth~1, no_auger)
-#v <- variogram(depth~1, all_sources, cutoff = 445.8491, width = 37.15409)
-
-# plot semivariogram
-plot(v, plot.numbers = TRUE, xlab = "distance h [m]",
-     ylab = expression(gamma(h)),
-     xlim = c(0, 1.055 * max(v$dist)))
-
-# fit a model/variogram to the data
-v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
-plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
-     ylab = expression(gamma(h)),
-     xlim = c(0, 1.055 * max(v$dist))) ## draws a single model; draw 2 models in single plot:
-# use variogram model to krig
-k <- krige(depth~1, all_sources, grd, v.m)
-```
-
-```{r W3-map}
+```{r krig-output-map}
 #map of watershed 3 with depth to bedrock
 hillshade_location <- paste0(arsenal, "/w3_dems/1mdem_hillshade.tif")
 hill <- rast(hillshade_location) %>% 
@@ -510,26 +348,17 @@ plot(-k_terra+10)
 
 writeRaster(k_terra, "krig_output.tif", overwrite = TRUE)
 
-#watershed boundary
-
-plot(w3_outline)
-#expanse(w3_outline)
-
-plot(w3_stream)
-
 #point locations- snapped points from above chunk
 #w3_stic_locs_snap <- "w3_stic_locs_snap.shp"
 
 # w3_stic_locs_r <- vect(w3_stic_locs_snap) %>% 
 #   left_join(pks_w3, by = "ID")
 
-
-
 #w3_stic_locs_r <- vect(w3_stic_locs_snap)
 #writeVector(w3_stic_locs_r, "./seismic_map_exports/w3_stic_locs_snap.shp")
 
 
-
+# Viridis plot
 ggplot()+
   geom_spatraster(data = hill)+
   theme_void()+
@@ -546,120 +375,93 @@ geom_sf(data = as.contour(m11, nlevels = 30), color = "white", alpha = 0.3)+
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))
 
+# one color plot
 ggplot()+
   
   theme_void()+
   #theme(legend.position = "")+
   geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
     scale_fill_continuous(na.value = "transparent", name = "Depth (m)", trans = "reverse")+
+  geom_sf(data = as.contour(m11, nlevels = 30), color = "white", alpha = 0.1)+
+
   #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
   ggspatial::annotation_scale(location = 'tr',
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))
 
-# old map from other workind dir that I copied to here
-# w3_map_f1 <- 
-#   ggplot()+
-#   geom_spatraster(data = hill)+
-#   theme_void()+
-#   #theme(legend.position = "")+
-#   scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-#                        guide = "none")+
-#     new_scale_fill() +
-#   #geom_spatraster(data = crop1, alpha = 0.5)+
-#   geom_sf(data = w3_outline, fill = NA, color = "#FFD166", alpha = 0.3, lwd = 2)+
-#   geom_sf(data = w3_net, colour = "#9AC0CD", lwd = 2) +
-#   geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
-#   #geom_sf(data = dd, aes(color = (depth)), pch = 19, size = 3) +
-#   scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
-#   #geom_sf(data = w3_pour, colour = "black") +
-#    #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
-#   #theme(rect = element_rect(fill = "transparent", color = NA))+
-#   ggspatial::annotation_scale(location = 'tr',
-#                               pad_x = unit(0.4, "cm"),
-#                               pad_y = unit(1, "cm"))
-#                               
-# w3_map_f1
-# ggsave("w3_map_f1f.png", w3_map_f1 )
 
 ```
+```{r depressions-plot}
+# prepare kriging output
+k_crop <- rast(k)$var1.pred_var1.pred %>% 
+  crop(ext(w3_outline)) %>%
+  mask(ext(w3_outline))
+k_resamp <- resample(k_crop, dem10, method = "bilinear")
+#plot(dem10 - k_resamp)
+writeRaster(dem10 - k_resamp, "krig_output.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
 
-
-Sanity check- take all observations not used in krig- holes not to bedrock- and see if they could be dug with this depth raster!
-```{r}
-
-```
-
-Run fill algorithm on bedrock raster, and then subtract to make a raster of depressional storage
-```{r}
-writeRaster(-k_terra+10, "krig_output.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
-
-m10 <- aggregate(mask_dem, 5)
-m11 <- resample(m10, k_terra, method = "bilinear")
-
-plot(mask_dem - k_terra)
-writeRaster(mask_dem$dem1m - k_terra$var1.pred_var1.pred, "bedrock_topo.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
-plot(rast("bedrock_topo.tif"))
-
-wbt_rust_backtrace(RUST_BACKTRACE = "0")
+# calculate filled bedrock topography
+# can specify which of these to use
 filled_krig_out <- "filled_krig.tif"
-wbt_sink(input = "krig_output.tif",
-                     output = filled_krig_out)
 wbt_fill_depressions(dem = "krig_output.tif",
                      output = filled_krig_out)
-wbt_breach_depressions(dem = "krig_output.tif",
-                     output = filled_krig_out)
-wbt_breach_depressions_least_cost(dem = "krig_output.tif",
-                     output = filled_krig_out, dist = 300)
+ wbt_fill_depressions_wang_and_liu(
+dem = "krig_output.tif",
+                     output = filled_krig_out
+ )
+dem1_filled_location <- paste0(arsenal, "/w3_dems/1mdem_filled.tif")
 
+ wbt_fill_depressions(dem = dem1_location,
+                     output = dem1_filled_location)
+ 
+ plot(rast(dem1_filled_location) - rast(dem1_location))
+ 
+diff <- rast(dem1_filled_location) - rast(dem1_location)
+diff[diff == 0] <- NA
+plot(diff)
+ 
+ test <- resample(rast(dem1_filled_location) - rast(dem1_location), dem10, method = "bilinear")
 
-plot(rast(filled_krig_out))
+plot(test)
+test[test > 0.01] <- NA
+plot(test)
+# format inputs for surface depression plotting
+surface_dep <- rast(filled_krig_out) - dem10 + k_resamp
+subsurace_dep <- dem10 - rast(filled_krig_out)
+plot(subsurace_dep)
+contours_10m <- crop(as.contour(dem10, nlevels = 30), w3_outline)
 
-plot(rast("krig_output.tif"))
+# Final plot- 2 panels, one for surface and one for subsurface depressions
+par(mfrow = c(1, 2))
+plot(mask(test*10, w3_outline), main = "10m surface depressions",
+     axes = FALSE)
+lines(contours_10m, col = "grey", alpha = 0.2)
+plot(mask(k_resamp, w3_outline), main = "10m subsurface depressions",
+     axes = FALSE)
+lines(contours_10m, col = "grey", alpha = 0.2)
 
-# I don't know why but I have to run through all of this twice for it to actually work
-breach_output <- "5m_breach.tif"
-wbt_breach_depressions_least_cost(
-  dem = "krig_output.tif",
-  output = breach_output,
-  dist = 5,
-  fill = TRUE)
-
-fill_output <- "5m_fill.tif"
-wbt_fill_depressions_wang_and_liu(
-  dem = breach_output,
-  output = fill_output
-)
-#subsurface depressional storage
-rast(fill_output)
-plot(rast(fill_output) - rast("krig_output.tif"))
-
-# bedrock topography
-bedrock_loc <- "bedrock_topo.tif"
-breach_output_rock <- "1m_breach_rock.tif"
-wbt_breach_depressions_least_cost(
-  dem = bedrock_loc,
-  output = breach_output_rock,
-  dist = 1,
-  fill = TRUE)
-
-fill_output_rock <- "1m_fill_rock.tif"
-wbt_fill_depressions_wang_and_liu(
-  dem = "bedrock_topo.tif",
-  output = fill_output_rock
-)
-#subsurface depressional storage
-plot(rast(fill_output_rock))
-
-plot(k_terra)
-terra::lines(as.contour(mask_dem, nlevels = 30), col = "white",alpha = 0.3)
-
-contour(m11, add = TRUE, col = "white", nlevels = 30, labels = "")
-plot(m11)
-lines(as.contour(k_terra, nlevels = 30), col = "white")
-
-contour(k_terra, add = TRUE, col = "white", nlevels = 30, labels = "")
 ```
+```{r}
+# also try plotting hillshades of surface versus bedrock
+bedrock_topo <- "krig_output.tif"
+
+bedrock_hillshade <- "./bedrock_rasters/bed_hill.tif"
+wbt_hillshade(
+  dem = bedrock_topo,
+  output = bedrock_hillshade
+)
+
+surface_topo <- "10mdem_crop.tif"
+surface_hillshade <- "10mdem_crop_hill.tif"
+wbt_hillshade(
+  dem = dem10_location,
+  output = surface_hillshade
+)
+plot(mask(rast(bedrock_hillshade), w3_outline))
+plot(rast(surface_hillshade) - mask(rast(bedrock_hillshade), w3_outline))
+
+```
+
 
 ```{r calculate-w3-topo}
 #flow accumulation/upslope drainage area at 3 m resolution calculated earlier in markdown
@@ -735,47 +537,20 @@ w3_slope <- extract(rast(slope_output), locs_shape, ID = FALSE, bind = TRUE) %>%
   as_tibble() %>% 
   pivot_longer(-ID)
 
-w3_topo <- rbind(w3_uaa, w3_twi, w3_tpi, w3_slope, w3_curve)
-
-```
-```{r calculate-curvature}
+# preparing inputs for curvature
 dem <- "./HB/1m hydro enforced DEM/dem1m.tif"
 m1 <- rast(dem)
 m10 <- aggregate(m1, 10)
 
-# w3_shed <- "./w3_dems/w3_shed.tif"
-# w3_outline <- as.polygons(rast(w3_shed), extent=FALSE)
-# #FB
-# fb_shed <- "./fb_dems/fb_shed.tif"
-# fb_outline <- as.polygons(rast(fb_shed), extent=FALSE)
-# #ZZ
-# zz_shed <- "./zz_dems/zz_shed.tif"
-# zz_outline <- as.polygons(rast(zz_shed), extent=FALSE)
 
-# fb_curve <- m1 %>% 
-#   crop(fb_outline) %>% 
-#   mask(fb_outline) %>% 
-#   spatialEco::curvature()
-# zz_curve <- m1 %>% 
-#   crop(zz_outline) %>% 
-#   mask(zz_outline)%>% 
-#   spatialEco::curvature()
-# w3_curve <- m1 %>% 
-#   crop(w3_outline) %>% 
-#   mask(w3_outline)%>% 
-#   spatialEco::curvature()
-#curve1 <- spatialEco::curvature(m1)
 curve10 <- spatialEco::curvature(m11, type = "planform")
 
 w3_curve <- extract(curve10, w3_locs[,2:3]) %>% 
   rename("curvature" = dem1m) %>% 
   pivot_longer(-ID)
-fb_curve <- extract(curve10, fb_locs[,2:3]) %>% 
-  rename("curvature" = dem1m) %>% 
-  pivot_longer(-ID)
-zz_curve <- extract(curve10, zz_locs[,2:3]) %>% 
-  rename("curvature" = dem1m) %>% 
-  pivot_longer(-ID)
+
+w3_topo <- rbind(w3_uaa, w3_twi, w3_tpi, w3_slope, w3_curve)
+
 ```
 
 Table of metrics
@@ -1042,26 +817,12 @@ comb %>%
   geom_text(aes(label = ID))+
   geom_abline(slope = 1)+
   theme_classic()
-zz_pour_snap_read <- vect("./zz_dems/zz_pour_snap.shp")
-# plot(rast(zz_streams), 
-#      xlim = c(280200, 280410),
-#      ylim = c(4869300, 4869000))
-# points(zz_pour_snap_read, pch = 1)
-
-zz_shed <- "./zz_dems/zz_shed.tif"
-# wbt_watershed(d8_pntr = zz_d8pt,
-#               pour_pts = zz_pour_snap,
-#               output = zz_shed)
-
-#plot(rast(zz_shed))
-#convert raster of watershed area to vector for final mapping
-zz_outline <- as.polygons(rast(zz_shed), extent=FALSE)
-#plot(zz_outline)
 
 ```
 
 # Longitudinal Profiles
-```{r}
+Relevant calculations were done in Arc
+```{r Longitidunal-profiles}
 exaggeration <- 3
 E3_seis <- read_csv("./transect_exports_oct1/E3seis.csv") %>% 
   mutate(elevation = RASTERVALU - depth * exaggeration,
@@ -1184,161 +945,7 @@ plot1 <- fungal %>%
 plot1
 ```
 
-
-old code- will not work now, input datasets have changed
-
-```{r}
-#now that I have all of these datasets, I need to clip them to the extent of watershed 3
-
-
-#wells
-wells_vect <- vect(wells, geom=c("Longitude", "Latitude"), crs="epsg:4326", keepgeom=FALSE)
-wells_vect_proj <- project(wells_vect, crs(dem))
-plot(wells_vect)
-wells_rast <- rasterize(wells_vect_proj, mask_dem, field = "Max_depth", fun = "mean")
-plot(wells_rast)
-
-#soils pits
-scott <- mutate(scott, depth = depthclass * 25)
-scott_vect <- vect(scott, geom=c("easting", "northing"), crs=crs1, keepgeom=FALSE)
-plot(scott_vect)
-# Create new column filled with default colour
-scott_vect$Colour="black"
-# Set new column values to appropriate colours
-scott_vect$Colour[scott_vect$depthclass>=3]="red"
-scott_vect$Colour[scott_vect$depthclass<=2]="blue"
-
-scott_rast <- rasterize(scott_vect, mask_dem, field = "depth", fun = "mean")
-plot(scott_rast)
-
-avg <- ((scott_rast + wells_rast))
-ra <- aggregate(r, 10)
-
-#attempt to interpolate a depth model from these two datasets and DEM
-xy <- data.frame(xyFromCell(scott_rast, 1:ncell(scott_rast)))
-v <- values(scott_rast)
-i <- !is.na(v)
-xy <- xy[i,]
-v <- v[i]
-
-tps <- Tps(xy, v)
-p <- rast(scott_rast)
-
-# use model to predict values at all locations
-p <- interpolate(p, tps)
-p <- mask(p, mask_dem)
-plot(p)
-points(wells_vect_proj, cex = wells_vect_proj$Max_depth/200)
-points(scott_vect, cex = scott_vect$depth / 200)
-lines(w3_stream, col = "blue")
-plot(mask(crop(soil, w3), w3))
-plot(avg)
-
-se <- interpolate(rast(p), tps, fun=predictSE)
-se <- mask(se, mask_dem)
-plot(se)
-#interpolate point measurements into rasters with the same resolution as the DEM
-#OR all measurements in a cell go into a fitted normal distribution, describing the depths observed in that cell. By assuming a normal distribution, I can just add the means and sd or the distributions themselves to combine them.
-#all cells with have a mean and sd associated with them. This will incorporate uncertainty into the model of soil depth.
-
-#assign a confidence to each measurement, using a normal distribution.
-
-#scott dataset 1, converting uniform distribution to a normal
-u1 <- runif(10000, min = 0, max = 1)
-u2 <- runif(10000, min = 0, max = 1)
-z1 <- sqrt(-2 * log(u1)) * sin(2*3.14*u2)
-z2 <- sqrt(-2 * log(u2)) * sin(2*3.14*u1)
-hist(u1)
-hist(z1)
-
-```
-
-```{r}
-# 6/12/24
-#trying to find locations where we know how deep it is to take seismic measurements.
-#randomly sample Scott's soil pits, just to see how well they do with some deep and shallow depth classes
-
-deep <- scott %>% filter(grepl("WS3", pedon)) %>% 
-  sample_n(20, replace = FALSE)
-
-shallow <- scott %>% filter(depthclass == 1) %>% 
-  sample_n(10, replace = FALSE)
-
-all <- rbind(deep, shallow)
-write.csv(deep, "soildepth_test_sample.csv")
-```
-
-```{r}
-# 6/17/24
-#read in cone pond pedons
-cone <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=9ce4f5893bdd16914d116fe38486a01c")
-#cone pond pedon descriptions
-desc0 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=7928b6c41dbbd09b52ffa041443087f6")
-
-scott2 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=bb91029a464278a2e47451aafec435c2")
-#subsetting for examples of Inceptisol descriptions
-incept <- scott %>% filter(hpu == "I")
-incept2 <- scott2 %>% filter(hpu == "I")
-incept3 <- cone %>% filter(hpu == "I")
-
-#read in pedon descriptions
-desc1 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.210.2&entityid=407e3b6b8b88aaf095f15efeb865efd6")
-
-lat <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.361.3&entityid=cca9cc4a0a7218d0602aede8f3f8697e")
-
-desc0 <- read_csv("https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.385.1&entityid=7928b6c41dbbd09b52ffa041443087f6")
-
-#filter descriptions for Inceptisol horizons
-info <- filter(desc1, pedon %in% incept$pedon)
-info2 <- filter(lat, pedon %in% incept2$pedon)
-info3 <- filter(desc0, pedon %in% incept3$pedon)
-
-write.csv(info, "HB_inceptisols.csv")
-write.csv(incept, "incept_locs.csv")
-
-write.csv(info2, "LatWeathering_Inceptisols.csv")
-write.csv(info3, "ConePond_Inceptisols.csv")
-
-head(info2)
-```
-
-```{r}
-# 7/10/24
-# making figure for coop meeting- failed, had to make it in arc
-seis2 <- read_csv("HVSR_7_24.csv")
-
-seis <- seis2 %>% 
-  select(grilla_number, lat, long, quality, depth) %>% 
-  filter(quality != "not sesame")
-seis$depth <- as.numeric(seis$depth)
-write_csv(seis, "HVSR_for_arc.csv")
-
-seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE)
-seis_vect_p <- project(seis_vect, crs(w3))
-
-ggplot()+
-  geom_spatvector(data = w3)+
-  geom_point(data=seis, aes(x = long, y = lat, color = depth))
-
-
-```
-
-```{r}
-# 7/13/24
-# making figure for Kevin of the dynamic nature of throughflow
-# use pour point to get DEM, and calculate watershed boundary
-# pour point of w3
-w3_coords <- c(281543.36, 4870433.54)
-#create pour point shapefile
-#make dataframe
-pourpoint <- data.frame("easting" = c(w3_coords[1]),
-                        "northing" = c(w3_coords[2]))
-pourpoint_vect <- vect(pourpoint, geom=c("easting", "northing"), crs="epsg:26919", keepgeom=FALSE)
-
-
-```
-
-```{r}
+```{r calibration-curve}
 # 7/18/24
 # redoing calibration curve
 cali <- read_csv("calicurve_wells.csv")
@@ -1422,4 +1029,121 @@ good <-   all_cali %>%
   filter(quality == "yes") 
   
 mean(good$Vs_min)
+```
+Sanity check- take all observations not used in krig- holes not to bedrock- and see if they could be dug with this depth raster!
+```{r}
+
+```
+
+## DEPREC
+```{r orginal krig chunk}
+# # chunk that will run the variogram calculation and run kriging model
+# 
+# # create the empty grid to hold the output of kriging
+# st_bbox(w3_outline) |>
+#   st_as_stars(dx = 1) -> grd
+# 
+# #grd <- mask_dem
+# 
+# # Remove empty geometries
+# which(st_is_empty(all_sources))
+# all_sources <- all_sources[-which(st_is_empty(all_sources)),]
+# # Remove missing depth values, all 3 are in auger dataset
+# which(is.na(all_sources))
+# all_sources <-all_sources[-which(is.na(all_sources)),]
+# 
+# no_auger <- filter(all_sources, source != "2019_auger")
+# 
+# # calculate the sample variogram
+# v <- variogram(depth~1, no_auger)
+# #v <- variogram(depth~1, all_sources, cutoff = 445.8491, width = 37.15409)
+# 
+# # plot semivariogram
+# plot(v, plot.numbers = TRUE, xlab = "distance h [m]",
+#      ylab = expression(gamma(h)),
+#      xlim = c(0, 1.055 * max(v$dist)))
+# 
+# # fit a model/variogram to the data
+# v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
+# plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
+#      ylab = expression(gamma(h)),
+#      xlim = c(0, 1.055 * max(v$dist))) ## draws a single model; draw 2 models in single plot:
+# # use variogram model to krig
+# k <- krige(depth~1, all_sources, grd, v.m)
+```
+Try multivariate approach- did not work
+```{r topography-multivariate}
+#extract topographic values for each input data location
+combin_norm
+
+plot(curve5)
+
+extract(dem)
+#flow accumulation/drainage area
+mask_dem_location <- paste0(arsenal, "/w3_dems/1mdem_w3_masked.tif")
+fill_output <- "./w3_dems/10mdem_fill.tif"
+
+#flow accumulation/drainage area
+flowacc_output <- paste0(arsenal,"/w3_dems/10mdem_flowacc.tif")
+
+#Slope
+slope_output <- paste0(arsenal,"/w3_dems/10mdem_slope.tif")
+
+#calculate TPI
+tpi_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
+
+#TWI
+twi_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
+
+w3_uaa <- 
+  extract(rast(flowacc_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
+  rename("uaa" = `X10mdem_flowacc`) #%>% 
+  #as_tibble()
+
+w3_tpi <- extract(rast(tpi_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
+  rename("tpi" = `X10mdem_tpi`) %>% 
+  #as_tibble() %>% 
+  select(tpi)
+
+w3_twi <- extract(rast(twi_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
+  rename("twi" = `X10mdem_twi`) %>% 
+  #as_tibble() %>% 
+  select(twi)
+
+w3_slope <- extract(rast(slope_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
+  rename("slope" = `X10mdem_slope`) %>% 
+  #as_tibble() %>% 
+  select(slope)
+
+w3_topo <- bind_spat_cols(w3_uaa, w3_twi, w3_tpi, w3_slope)
+
+all_sources2 <- st_as_sf(w3_topo)
+which(st_is_empty(all_sources2))
+all_sources2 <- all_sources2[-which(st_is_empty(all_sources2)),]
+# Remove missing depth values, all 3 are in auger dataset
+which(is.na(all_sources2))
+all_sources2 <-all_sources2[-which(is.na(all_sources2)),]
+
+no_auger <- filter(all_sources2, source != "2019_auger")
+
+# Multivariate kriging
+hscat(log(depth) ~ 1, no_auger, (0:9) * 100)
+
+ cok.maps <- predict(vm.fit, meuse.grid)
+# calculate the sample variogram
+v <- variogram(depth~1, no_auger)
+#v <- variogram(depth~1, all_sources, cutoff = 445.8491, width = 37.15409)
+
+# plot semivariogram
+plot(v, plot.numbers = TRUE, xlab = "distance h [m]",
+     ylab = expression(gamma(h)),
+     xlim = c(0, 1.055 * max(v$dist)))
+
+# fit a model/variogram to the data
+v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
+plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
+     ylab = expression(gamma(h)),
+     xlim = c(0, 1.055 * max(v$dist))) ## draws a single model; draw 2 models in single plot:
+# use variogram model to krig
+k <- krige(depth~1, all_sources, grd, v.m)
 ```
