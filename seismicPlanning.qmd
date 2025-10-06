@@ -361,14 +361,16 @@ k <- krige(depth~1, all_sources, grd, v.m)
 
 Krig again, but per Yang's suggestion exclude a validation dataset and use it to calculate RMSE
 ```{r}
+st_bbox(w3_outline) |>
+  st_as_stars(dx = 10) -> grd
 set.seed(1)
 no_auger <- filter(all_sources, source != "2019_auger")
 df_form <- as_tibble(no_auger)
 df_form$group_equal_range <- cut(df_form$depth, breaks = 5, labels = FALSE)
 
 training <- df_form %>% 
-  #group_by(group_equal_range) %>% 
-  slice_sample(, prop = 0.7)
+  group_by(group_equal_range) %>% 
+  slice_sample(, prop = 0.8)
 
 validation <- anti_join(df_form, training)
 training_sf <- st_as_sf(training)
@@ -382,6 +384,28 @@ extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>%
   as_tibble() %>% 
   summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
 
+```
+```{r}
+plot(rast(k))
+dem10 <- rast("/Users/johnmorgan/Documents/VT Research/HB_data/hbef_10mdem/hbef_10mdem.tif") %>% 
+  crop(ext(w3_outline)) %>%
+  mask(ext(w3_outline))
+
+k_crop <- rast(k)$var1.pred_var1.pred %>% 
+  crop(ext(w3_outline)) %>%
+  mask(ext(w3_outline))
+
+k_resamp <- resample(k_crop, dem10, method = "bilinear")
+plot(dem10 - k_resamp)
+
+writeRaster(dem10 - k_resamp, "krig_output.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
+
+filled_krig_out <- "filled_krig.tif"
+
+wbt_fill_depressions(dem = "krig_output.tif",
+                     output = filled_krig_out)
+plot(rast(filled_krig_out) - dem10 + k_resamp, main = "10m surface depressions")
+plot(k_resamp, main = "10m subsurface depressions")
 ```
 
 
