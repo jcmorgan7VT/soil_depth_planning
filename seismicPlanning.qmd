@@ -61,6 +61,16 @@ w3_stream <- crop(w3_stream, w3_outline) #currently in NAD83
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
 plot(w3_regime) #currently in NAD83
 
+# STIC sensor locations
+stic_locs_snap_location <- paste0(arsenal, "/w3_stic_locs_snap.shp")
+pks_w3 <- read_csv(paste0(arsenal, "/pks_w3.csv"))
+
+w3_stic_locs_r <- vect(stic_locs_snap_location) %>% 
+  left_join(pks_w3, by = "ID")
+
+w3_stic_location <- "w3_stic_locs.shp"
+writeVector(w3_stic_locs_r, w3_stic_location)
+
 # Read in data sources ####
 #most recent soil map
 #https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
@@ -70,6 +80,7 @@ mask_soil <- mask(crop_soil, w3_outline)
 plot(mask_soil) #currently in NAD83
 #locations and depths of soil pits, archive entry from Scott
 #https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.210.2
+## Scott Pedons ####
 scott <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/42d7e94aea392080e7c40877c9a5df83")
 scott_vect <- vect(scott, geom = c("easting", "northing"), crs = crs1)
 scott_vect <- crop(scott_vect, w3_outline)
@@ -90,6 +101,7 @@ scott_rocks <- scott_horizons %>%
 #does not include soil pits from lateral weathering drive, I think
 #check this link, I think it is wrong 6/17/24
 #scott2 <- read_csv()
+## Lat weathering pedons ####
 #lat weathering pedons
 lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/bb91029a464278a2e47451aafec435c2") %>% 
   filter(base == "R")
@@ -111,6 +123,7 @@ lat_hit_rock <-
 plot(lat_hit_rock)
 #GPR results
 
+## GW wells ####
 #groundwater well locations with associated depth
 #metadata: https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.161.4
 #depth in cm
@@ -132,12 +145,15 @@ wells_vect <- wells %>%
 # turns out there are only 4 deep wells with the depth associated...
 plot(wells_vect)
 #also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
+
+## 1994 rocks ####
 #outcrops, from 1994 geologic map
 rocks_1994 <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops') %>% 
   crop(w3_outline)
 # Other geologic map: 
 # https://pubs.usgs.gov/of/2000/of00-045/of0045p1.pdf
 
+## My rocks ####
 john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>% 
   select(lat, long) %>% 
   mutate(depth = as.numeric(0),
@@ -286,7 +302,7 @@ Krig again, but per Yang's suggestion exclude a validation dataset and use it to
 ```{r krig-with-split}
 # Krig with validation split
 # input params
-spatial_resolution <- 10 # meters
+spatial_resolution <- 1 # meters
 split <- 0.8 # 80/20 for example
 number_of_classes <- 5 # number of classes for stratified random sampling
 set.seed(1)
@@ -323,6 +339,17 @@ extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>%
   as_tibble() %>% 
   summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
 
+# Save Raster output
+k_terra <- rast(k) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline) %>% 
+  select(var1.pred_var1.pred)
+# Save output krigged map for whitebox operations
+plot(k_terra)
+
+krig_location <- "krig_output.tif"
+writeRaster(k_terra, krig_location, overwrite = TRUE)
+
 ```
 ```{r krig-output-map}
 #map of watershed 3 with depth to bedrock
@@ -337,25 +364,7 @@ hill <- rast(hillshade_location) %>%
 #crop1 <- crop(m1, ext(c(xbounds, ybounds)))
 #writeRaster(crop1, "1mdemw3_cropped.tif")
 plot(mask_dem)
-k_terra <- rast(k) %>% 
-  crop(w3_outline) %>% 
-  mask(w3_outline) %>% 
-  select(var1.pred_var1.pred)
-# Save output krigged map for whitebox operations
-plot(k_terra)
-max(k_terra)
-plot(-k_terra+10)
 
-writeRaster(k_terra, "krig_output.tif", overwrite = TRUE)
-
-#point locations- snapped points from above chunk
-#w3_stic_locs_snap <- "w3_stic_locs_snap.shp"
-
-# w3_stic_locs_r <- vect(w3_stic_locs_snap) %>% 
-#   left_join(pks_w3, by = "ID")
-
-#w3_stic_locs_r <- vect(w3_stic_locs_snap)
-#writeVector(w3_stic_locs_r, "./seismic_map_exports/w3_stic_locs_snap.shp")
 
 
 # Viridis plot
@@ -393,12 +402,15 @@ ggplot()+
 ```
 ```{r depressions-plot}
 # prepare kriging output
-k_crop <- rast(k)$var1.pred_var1.pred %>% 
-  crop(ext(w3_outline)) %>%
-  mask(ext(w3_outline))
+
 k_resamp <- resample(k_crop, dem10, method = "bilinear")
-#plot(dem10 - k_resamp)
-writeRaster(dem10 - k_resamp, "krig_output.tif", overwrite = TRUE, NAflag=-9999, gdal="COMPRESS=NONE")
+plot(dem1 - k_terra)
+# Save bedrock topography raster
+bedrock_topo_location <- "bedrock_topo.tif"
+writeRaster(dem1 - k_terra, 
+            bedrock_topo_location, 
+            overwrite = TRUE, NAflag=-9999, 
+            gdal="COMPRESS=NONE")
 
 # calculate filled bedrock topography
 # can specify which of these to use
@@ -441,8 +453,9 @@ plot(mask(k_resamp, w3_outline), main = "10m subsurface depressions",
 lines(contours_10m, col = "grey", alpha = 0.2)
 
 ```
-```{r}
+```{r plot-hillshades}
 # also try plotting hillshades of surface versus bedrock
+# I don't think this is that useful
 bedrock_topo <- "krig_output.tif"
 
 bedrock_hillshade <- "./bedrock_rasters/bed_hill.tif"
@@ -463,30 +476,8 @@ plot(rast(surface_hillshade) - mask(rast(bedrock_hillshade), w3_outline))
 ```
 
 
-```{r calculate-w3-topo}
-#flow accumulation/upslope drainage area at 3 m resolution calculated earlier in markdown
-flowacc_output <- "./HB/1m hydro enforced DEM/dem3m_flowacc.tif"
-
-#convert STIC data to a SpatVector data format
-locs_shape <- vect(w3_locs, 
-                   geom=c("POINT_X", "POINT_Y"), 
-                   crs = crs(rast(flowacc_output))) #set crs to NAD 83
-
-#calculate 10m DEM, then breach and fill
-dem <- "./HB/1m hydro enforced DEM/dem1m.tif"
-m1 <- rast(dem)
-m10 <- aggregate(m1, 10)
-#save raster, because whitebox wants it is a files location instead of an object in R
-writeRaster(m10, "./w3_dems/10mdem.tif", overwrite = TRUE)
-
-
-breach_output <- "./w3_dems/10mdem_breach.tif"
-wbt_breach_depressions_least_cost(
-  dem = "./w3_dems/10mdem.tif",
-  output = breach_output,
-  dist = 10,
-  fill = TRUE)
-
+```{r calculate-topo}
+# fill DEM just in case
 fill_output <- "./w3_dems/10mdem_fill.tif"
 wbt_fill_depressions_wang_and_liu(
   dem = breach_output,
@@ -516,42 +507,68 @@ wbt_wetness_index(sca = flowacc_output, #flow accumulation
                   slope = slope_output,
                   output = twi_output)
 
+#Curvature
+curve10 <- spatialEco::curvature(dem10, type = "planform")
 
-w3_uaa <- extract(rast(flowacc_output), locs_shape, ID = FALSE, bind = TRUE) %>% 
+
+
+```
+```{r extract-values}
+w3_uaa <- extract(rast(flowacc_output), 
+                  w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("uaa" = `X10mdem_flowacc`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
 
-w3_tpi <- extract(rast(tpi_output), locs_shape, ID = FALSE, bind = TRUE) %>% 
+w3_tpi <- extract(rast(tpi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("tpi" = `X10mdem_tpi`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
 
-w3_twi <- extract(rast(twi_output), locs_shape, ID = FALSE, bind = TRUE) %>% 
+w3_twi <- extract(rast(twi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("twi" = `X10mdem_twi`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
 
-w3_slope <- extract(rast(slope_output), locs_shape, ID = FALSE, bind = TRUE) %>% 
+w3_slope <- extract(rast(slope_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("slope" = `X10mdem_slope`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
 
-# preparing inputs for curvature
-dem <- "./HB/1m hydro enforced DEM/dem1m.tif"
-m1 <- rast(dem)
-m10 <- aggregate(m1, 10)
-
-
-curve10 <- spatialEco::curvature(m11, type = "planform")
-
-w3_curve <- extract(curve10, w3_locs[,2:3]) %>% 
+w3_curve <- extract(curve10, w3_stic_locs_r) %>% 
   rename("curvature" = dem1m) %>% 
   pivot_longer(-ID)
 
 w3_topo <- rbind(w3_uaa, w3_twi, w3_tpi, w3_slope, w3_curve)
+```
+```{r zonal-stats-surface}
+# Delineate watersheds for each STIC location
+d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
+w3_sub_shed <- "w3_sub_sheds.tif"
+wbt_watershed(d8_pntr = d8,
+              pour_pts = stic_locs_snap_location,
+              output = w3_sub_shed)
+plot(rast(w3_sub_shed))
+
+plot(rast(d8))
 
 ```
+```{r zonal-stats-SUBsurface}
+#flow accumulation/drainage area
+krig_flowdir_output <- "./krig_flowdir.tif"
+wbt_d8_pointer(dem = bedrock_topo_location,
+               output = krig_flowdir_output)
+plot(rast(krig_flowdir_output))
+
+w3_krig_shed <- "w3_sub_sheds.tif"
+
+wbt_watershed(d8_pntr = krig_flowacc_output,
+              pour_pts = w3_stic_location,
+              output = w3_krig_shed)
+
+plot(rast(w3_krig_shed))
+```
+
 
 Table of metrics
 ```{r}
@@ -565,17 +582,14 @@ vect_stream_path <- paste0(arsenal, "/AGU24posterAnalysis/vector_stream/vector_s
 vect_stream <- vect(vect_stream_path)
 plot(vect_stream)
 
-w3_stic_locs_snap <- paste0(arsenal, "/w3_stic_locs_snap.shp")
-pks_w3 <- read_csv(paste0(arsenal, "/pks_w3.csv"))
 
-w3_stic_locs_r <- vect(w3_stic_locs_snap) %>% 
-  left_join(pks_w3, by = "ID")
 # Delineate watersheds for each STIC location
 d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
 w3_sub_shed <- "w3_sub_sheds.tif"
 wbt_watershed(d8_pntr = d8,
-              pour_pts = w3_stic_locs_snap,
+              pour_pts = stic_locs_snap_location,
               output = w3_sub_shed)
+plot(rast(w3_sub_shed))
 plot(filter(rast(w3_sub_shed), w3_sub_sheds == 1))
 plot(w3_outline, add = TRUE)
 # within the watershed for each stic location, calculate the average of several topographic values:
