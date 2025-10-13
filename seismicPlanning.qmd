@@ -16,7 +16,9 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
        terra,  tidyterra, mapview, ggnewscale, googlesheets4,
        gstat, # Variogram and krig functions
-       spatialEco # Curvature function
+       spatialEco, # Curvature function
+       RColorBrewer, # set up color scales for plots later
+       plotly
        )
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
@@ -384,27 +386,75 @@ geom_sf(data = as.contour(m11, nlevels = 30), color = "white", alpha = 0.3)+
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))
 
-# one color plot
+# one color plot, using magma color scheme
 ggplot()+
-  
+  theme_void()+
+  geom_spatraster(data = hill)+
   theme_void()+
   #theme(legend.position = "")+
-  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
-    scale_fill_continuous(na.value = "transparent", name = "Depth (m)", trans = "reverse")+
-  geom_sf(data = as.contour(m11, nlevels = 30), color = "white", alpha = 0.1)+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
 
+  new_scale_fill()+
+geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
+  #geom_sf(data = dd, aes(color = (depth)), pch = 19, size = 3) +
+  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+  #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
+  #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
   #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps"
+  )+
   ggspatial::annotation_scale(location = 'tr',
                               pad_x = unit(0.4, "cm"),
-                              pad_y = unit(1, "cm"))
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
 
+# Plotly plot- not finished
+# to plot 
+test <- ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) 
+
+test %>% 
+  ggplotly()
 
 ```
 ```{r depressions-plot}
 # prepare kriging output
 
 k_resamp <- resample(k_crop, dem10, method = "bilinear")
-plot(dem1 - k_terra)
+plot(dem1 - k_resamp)
 # Save bedrock topography raster
 bedrock_topo_location <- "bedrock_topo.tif"
 writeRaster(dem1 - k_terra, 
@@ -544,16 +594,226 @@ w3_topo <- rbind(w3_uaa, w3_twi, w3_tpi, w3_slope, w3_curve)
 ```{r zonal-stats-surface}
 # Delineate watersheds for each STIC location
 d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
-w3_sub_shed <- "w3_sub_sheds.tif"
+w3_surface_sheds <- "w3_surface_sheds.tif"
 wbt_watershed(d8_pntr = d8,
               pour_pts = stic_locs_snap_location,
-              output = w3_sub_shed)
-plot(rast(w3_sub_shed))
+              output = w3_surface_sheds)
+plot(rast(w3_surface_sheds), col = my_colors)
 
-plot(rast(d8))
+
+# determine the average or total of different topographic variables within drainage areas
+# topographic metrics at 10 m resolution
+# curvature, upslope area, upslope volume, total depression volume upslope
+zones <- rast(w3_surface_sheds)
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(dem10, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+# curvature
+curv_r  <- resample(project(curve10, zones), zones, method="bilinear")
+z_curv <- zonal(curv_r, zones, fun = "mean", na.rm = TRUE)
+# upslope volume
+bed_r  <- resample(project(k_terra, zones), zones, method="bilinear")
+z_bed <- zonal(bed_r, zones, fun = "sum", na.rm = TRUE)
+# average upslope depth
+z_mean <- zonal(bed_r, zones, fun = "mean", na.rm = TRUE)
+
+zone_stats_surface <- bind_cols(z_dem, z_curv[,2], z_bed[,2], z_mean[,2]) %>% 
+  as_tibble()
+
+colnames(zone_stats_surface) <- c("ID", "Elevation (m)", "Planform Curvature", "Subsurface Volume (m^3)", "Average Depth (m)")
+
+
+
+zone_stats_surface %>% 
+  left_join(pks_w3, by = "ID") %>% 
+    left_join(z_surface, by = "ID") %>% 
+  select(-wshed) %>% 
+  pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
+group_by(names) %>% 
+  do(model = lm(pk ~ value, data = .)) %>%
+  mutate(p_value = summary(model)$coefficients[2],
+         r2 = summary(model)$r.squared[1]) #%>%
+  mutate(significant = p_value < 0.05)
 
 ```
 ```{r zonal-stats-SUBsurface}
+
+## Went and manually moved points in ARC!! Now I can use them to calculate topo metrics and what not
+bed_sheds <- (rast("bed_sheds2.tif")) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+
+bed_sheds[bed_sheds == 0] <- NA
+plot(bed_sheds, col = my_colors)
+
+# determine the average or total of different topographic variables within drainage areas
+# topographic metrics at 10 m resolution
+# curvature, upslope area, upslope volume, total depression volume upslope
+zones <- bed_sheds
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(dem10, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+# curvature
+curv_r  <- resample(project(curve10, zones), zones, method="bilinear")
+z_curv <- zonal(curv_r, zones, fun = "mean", na.rm = TRUE)
+# upslope volume
+bed_r  <- resample(project(k_terra, zones), zones, method="bilinear")
+z_bed <- zonal(bed_r, zones, fun = "sum", na.rm = TRUE)
+# average upslope depth
+z_mean <- zonal(bed_r, zones, fun = "mean", na.rm = TRUE)
+
+zone_stats_subsurface <- bind_cols(z_dem, z_curv[,2], z_bed[,2], z_mean[,2]) %>% 
+  as_tibble()
+
+colnames(zone_stats_subsurface) <- c("ID", "Elevation (m)", "Planform Curvature", "Subsurface Volume (m^3)", "Average Depth (m)")
+
+
+
+zone_stats_subsurface %>% 
+  left_join(pks_w3, by = "ID") %>% 
+    left_join(z_subsurface, by = "ID") %>% 
+  select(-wshed) %>% 
+  pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
+group_by(names) %>% 
+  do(model = lm(pk ~ value, data = .)) %>%
+  mutate(p_value = summary(model)$coefficients[2],
+         r2 = summary(model)$r.squared[1]) #%>%
+  mutate(significant = p_value < 0.05)
+
+
+```
+
+```{r plot-zonal-stats}
+# combine plots of zonal stats here:
+# calculate the range of each of these values throughout the whole watershed
+zones <- dem1
+values(zones) <- 1
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(dem10, zones), zones, method="bilinear")
+dem_min <- zonal(dem_r, zones, fun = "min", na.rm = TRUE)
+dem_mean <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+dem_max <- zonal(dem_r, zones, fun = "max", na.rm = TRUE)
+
+# curvature
+curv_r  <- resample(project(curve10, zones), zones, method="bilinear")
+dem_min <- zonal(dem_r, zones, fun = "min", na.rm = TRUE)
+dem_mean <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+dem_max <- zonal(dem_r, zones, fun = "max", na.rm = TRUE)
+# upslope volume
+bed_r  <- resample(project(k_terra, zones), zones, method="bilinear")
+dem_min <- zonal(dem_r, zones, fun = "min", na.rm = TRUE)
+dem_mean <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+dem_max <- zonal(dem_r, zones, fun = "max", na.rm = TRUE)
+# average upslope depth
+z_mean <- zonal(bed_r, zones, fun = "mean", na.rm = TRUE)
+dem_min <- zonal(dem_r, zones, fun = "min", na.rm = TRUE)
+dem_mean <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+dem_max <- zonal(dem_r, zones, fun = "max", na.rm = TRUE)
+
+zone_stats_whole <- bind_cols(z_dem, z_curv[,2], z_bed[,2], z_mean[,2]) %>% 
+  as_tibble()
+
+colnames(zone_stats_whole) <- c("ID", "Elevation (m)", "Planform Curvature", "Subsurface Volume (m^3)", "Average Depth (m)")
+# surface
+surface_stats <- zone_stats_surface %>% 
+  left_join(pks_w3, by = "ID") %>% 
+  left_join(z_surface, by = "ID") %>% 
+  select(-wshed) %>% 
+  pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>%
+  mutate(type = "Surface")
+
+# subsurface
+sub_stats <- zone_stats_subsurface %>% 
+  left_join(pks_w3, by = "ID") %>% 
+  left_join(z_subsurface, by = "ID") %>% 
+  select(-wshed) %>% 
+  pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
+  mutate(type = "Subsurface")
+
+combined <- rbind(surface_stats, sub_stats) 
+no_curve <- combined %>% 
+  filter(names != "Planform Curvature")
+
+combined %>% 
+  ggplot(aes(x = pk, y = value))+
+    geom_point(aes(color = type))+
+  geom_smooth(data =  no_curve,
+              aes(color = type), method = 'lm', se = FALSE)+
+    facet_wrap(type~names, ncol = 5, scales = "free_y", drop = TRUE)+
+  scale_color_manual(values = c("lightblue4", "firebrick"))+
+  theme_classic()+
+  theme(strip.text.y = element_blank())
+```
+
+```{r sub-watersheds-plots}
+## OLD PLOT
+# Plot of the different drainage areas, based on surface vs bedrock topography
+
+# set up colors for plotting
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+n <- 32
+my_colors <- sample(col_vector, n)
+
+# define extent so they match, set up plot
+plot_extent <- ext(bed_sheds)
+par(mfrow = c(1, 2))
+
+# plot surface drainage areas
+plot(crop(rast(w3_surface_sheds), plot_extent), 
+     col = my_colors, legend = FALSE, 
+     axes = FALSE,
+     main = "Surface drainage areas")
+text(vect("mod_bed_points.shp"), cex = 0.75)
+
+# plot subsurface drainage areas
+plot(crop(bed_sheds, plot_extent),
+     col = my_colors, legend = FALSE, axes = FALSE,
+     main = "Bedrock drainage areas")
+text(vect("mod_bed_points.shp"), cex = 0.75)
+# Plot of drainage area from two different surfaces plotted against each other
+surface <- rast(w3_surface_sheds)
+pixels <- surface
+values(pixels) <- 1
+z_surface <- zonal(pixels, rast(w3_surface_sheds), fun = "sum", na.rm = TRUE)
+                   
+subsurface <- bed_sheds
+pixels <- subsurface
+values(pixels) <- 1
+z_subsurface <- zonal(pixels, bed_sheds, fun = "sum", na.rm = TRUE)
+
+colnames(z_surface) <- c("ID", "UAA_surface")
+colnames(z_subsurface) <- c("ID", "UAA_bedrock")
+
+comb <- left_join(z_surface, z_subsurface, by = "ID")
+
+norm <- comb %>% 
+  ggplot(aes(x = (UAA_surface), y = (UAA_bedrock)))+
+  #geom_point()+
+  geom_text(aes(label = ID))+
+  geom_abline(slope = 1)+
+  lims(x = c(0, 40000),
+       y = c(0, 40000))+
+  theme_classic()
+
+logged <- comb %>% 
+  ggplot(aes(x = log(UAA_surface), y = log(UAA_bedrock)))+
+  #geom_point()+
+  geom_text(aes(label = ID))+
+  geom_abline(slope = 1)+
+  lims(x = c(7, 11),
+        y = c(7, 11))+
+  theme_classic()
+
+norm + logged
+
+```
+
+```{r fiddling-with-locs}
+
 #flow accumulation/drainage area
 krig_flowdir_output <- "./krig_flowdir.tif"
 wbt_d8_pointer(dem = bedrock_topo_location,
@@ -562,11 +822,172 @@ plot(rast(krig_flowdir_output))
 
 w3_krig_shed <- "w3_sub_sheds.tif"
 
-wbt_watershed(d8_pntr = krig_flowacc_output,
+wbt_watershed(d8_pntr = krig_flowdir_output,
               pour_pts = w3_stic_location,
               output = w3_krig_shed)
 
 plot(rast(w3_krig_shed))
+# do again, but for a breached and filled bedrock DEM
+bedrock_topo_breach <- "bedrock_topo_breach.tif"
+wbt_breach_depressions_least_cost(
+  dem = bedrock_topo_location,
+  output = bedrock_topo_breach,
+  dist = 10,
+  fill = TRUE)
+
+bedrock_topo_filled <- "bedrock_topo_filled.tif"
+wbt_fill_depressions_wang_and_liu(
+  dem = bedrock_topo_breach,
+  output = bedrock_topo_filled
+)
+plot(rast(bedrock_topo_filled))
+
+krig_flowdir_output <- "./krig_flowdir.tif"
+wbt_d8_pointer(dem = bedrock_topo_filled,
+               output = krig_flowdir_output)
+plot(rast(krig_flowdir_output))
+w3_krig_shed <- "w3_sub_sheds.tif"
+
+wbt_watershed(d8_pntr = krig_flowdir_output,
+              pour_pts = w3_stic_location,
+              output = w3_krig_shed)
+
+plot(rast(w3_krig_shed))
+
+## Went and manually moved points in ARC!! Now I can use them to calculate topo metrics and what not
+bed_sheds <- (rast("bed_sheds2.tif")) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+
+bed_sheds[bed_sheds == 0] <- NA
+plot(bed_sheds, col = my_colors)
+# convert flow acc to stream network and snap points
+#flow accumulation/drainage area
+flowacc_output <- "./export_to_arc/1mrock_flowacc.tif"
+wbt_d_inf_flow_accumulation(input = bedrock_topo_location,
+                            output = flowacc_output,
+                            out_type = "Specific Contributing Area")
+plot(rast(flowacc_output))
+#delineate streams
+bed_streams <- "./export_to_arc/bed_streams.tif"
+wbt_extract_streams(flow_accum = flowacc_output,
+                    output = bed_streams,
+                    threshold = 2000)
+plot(rast(bed_streams), col ="black")
+points(vect(w3_stic_locs_snap))
+writeVector(vect(w3_stic_locs_snap), "./export_to_arc/locs.shp")
+
+#snap pour point to streams
+bed_stic_locs_snap <- "bed_stic_locs_snap.shp"
+wbt_jenson_snap_pour_points(pour_pts = w3_stic_locs_snap,
+                            streams = bed_streams,
+                            output = bed_stic_locs_snap,
+                            snap_dist = 10)
+plot(rast(bed_streams), col = "black")
+points(vect(w3_stic_locs_snap), col = "black")
+points(vect(bed_stic_locs_snap), col = "red")
+text(vect(bed_stic_locs_snap))
+
+coords_df <- crds(vect(bed_stic_locs_snap))
+as.data.frame(vect(bed_stic_locs_snap))
+# 3. Modify the x-coordinate of the first point
+#coords_df[19,1] <- 281775
+coords_df[20,1] <- 281775
+
+modified_points_vec <- vect(coords_df, type = "points", crs = crs(bed_sic_locs))
+#modified_points_vec$ID <- bed_stic_locs_snap$ID
+plot(rast(bed_streams), col = "black")
+
+points(modified_points_vec)
+
+writeVector(modified_points_vec, "mod_bed_points.shp", overwrite = TRUE)
+
+
+bed_stic_locs_snap_mod <- "bed_stic_locs_snap.shp"
+wbt_jenson_snap_pour_points(pour_pts = "mod_bed_points.shp",
+                            streams = bed_streams,
+                            output = bed_stic_locs_snap_mod,
+                            snap_dist = 100)
+plot(rast(bed_streams), col = "black")
+points(vect(w3_stic_locs_snap), col = "black")
+points(vect(bed_stic_locs_snap_mod), col = "red")
+text(vect(bed_stic_locs_snap))
+
+w3_krig_shed_mod <- "krig_shed_mod.tif"
+wbt_watershed(d8_pntr = krig_flowdir_output,
+              pour_pts = "points_snapped_one.shp",
+              output = w3_krig_shed_mod)
+
+plot(rast(w3_krig_shed_mod), col = my_colors)
+plot(rast(bed_streams), add = TRUE, col = "black")
+
+```
+
+```{r move-pts-function}
+library(terra)
+
+# --- Load data ---
+r <- rast(flowacc_output)      # your raster
+pts <- vect("points_snapped_one.shp")              # your shapefile with point locations
+
+# --- Parameters ---
+window_radius <- 10   # number of cells (or specify in map units if you want)
+                     # this will define the search window around each point
+
+# --- Function to snap each point ---
+snap_to_max <- function(pt, r, window_radius) {
+  # Create a square buffer (or circular) around the point
+  buf <- buffer(pt, width = window_radius * res(r)[1])
+  
+  # Crop raster to the window area
+  r_sub <- crop(r, buf)
+  
+  # Mask raster to the exact window
+  r_masked <- mask(r_sub, buf)
+  
+  # Find cell with maximum value
+  max_cell <- which.max(values(r_masked))
+  
+  # Get coordinates of that cell
+  if (is.na(max_cell)) {
+    return(pt)  # if no valid values, return original point
+  } else {
+    xy <- xyFromCell(r_masked, max_cell)
+    return(vect(matrix(xy, ncol = 2), crs = crs(r), type = "points"))
+  }
+}
+
+# --- Apply snapping ---
+snapped_pts <- lapply(1:nrow(pts), function(i) {
+  snap_to_max(pts[i], r, window_radius)
+})
+
+# Combine into a single SpatVector
+snapped_pts <- do.call(rbind, snapped_pts)
+plot(rast(bed_streams), col = "black")
+
+# Specify which point to snap
+i <- 3
+window_radius <- 20
+# Snap that one
+snapped_pt <- snap_to_max(pts[i], r, window_radius)
+# Make a new SpatVector combining all others + the new point
+pts_snapped <- rbind(pts[1:i-1], snapped_pt, pts[i+1:31])
+# Reorder rows to original order
+pts_snapped <- pts_snapped[order(c(1:(i-1), nrow(pts_snapped), i:nrow(pts_snapped)-1))]
+
+# Save
+writeVector(pts_snapped, "points_snapped_one.shp", overwrite = TRUE)
+
+points(snapped_pts)
+pt <- snap_to_max(snapped_pts[3], r, 20)
+snapped_pts[3] <- pt
+points(, col = "black")
+points(pts_snapped[3], col = "blue")
+
+# --- Save result ---
+writeVector(snapped_pts, "snapped_points.shp", overwrite = TRUE)
+
 ```
 
 
@@ -793,44 +1214,6 @@ plot(rast(bed_sub_shed))
 plot(rast(w3_sub_shed))
 plot(rast(w3_sub_shed) - rast(bed_sub_shed))
 
-# Plot of the different drainage areas, based on surface vs bedrock topography
-p_load(RColorBrewer)
-qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
-col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
-n <- 32
-
-plot_extent <- ext(rast(bed_sub_shed))
-
-my_colors <- sample(col_vector, n)
-par(mfrow = c(1, 2))
-plot(crop(rast(w3_sub_shed), plot_extent), col = my_colors, legend = FALSE, 
-     axes = FALSE,
-     main = "Surface drainage areas")
-text(vect(w3_stic_locs_snap), cex = 0.75)
-plot(rast(bed_sub_shed), col = my_colors, legend = FALSE, axes = FALSE,
-     main = "Bedrock drainage areas")
-text(vect("mod_bed_points.shp"), cex = 0.75)
-# Plot of drainage area from two different surfaces plotted against each other
-subsurface <- rast(w3_sub_shed)
-pixels <- subsurface
-values(pixels) <- 1
-z_surface <- zonal(pixels, rast(w3_sub_shed), fun = "sum", na.rm = TRUE)
-subsurface <- rast(bed_sub_shed)
-pixels <- subsurface
-values(pixels) <- 1
-z_subsurface <- zonal(pixels, rast(bed_sub_shed), fun = "sum", na.rm = TRUE)
-
-colnames(z_surface) <- c("ID", "UAA_surface")
-colnames(z_subsurface) <- c("ID", "UAA_bedrock")
-
-comb <- left_join(z_surface, z_subsurface, by = "ID")
-
-comb %>% 
-  ggplot(aes(x = log(UAA_surface), y = log(UAA_bedrock)))+
-  #geom_point()+
-  geom_text(aes(label = ID))+
-  geom_abline(slope = 1)+
-  theme_classic()
 
 ```
 
