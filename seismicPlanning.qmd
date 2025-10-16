@@ -18,7 +18,9 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        gstat, # Variogram and krig functions
        spatialEco, # Curvature function
        RColorBrewer, # set up color scales for plots later
-       plotly
+       plotly,
+       mapedit,
+       lwgeom # function to split lines at points
        )
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
@@ -71,7 +73,22 @@ w3_stic_locs_r <- vect(stic_locs_snap_location) %>%
   left_join(pks_w3, by = "ID")
 
 w3_stic_location <- "w3_stic_locs.shp"
-writeVector(w3_stic_locs_r, w3_stic_location)
+#writeVector(w3_stic_locs_r, w3_stic_location)
+
+# SEEP LOCATIONS
+# Hubbard Brook Experimental Forest: W3 Surface Water Sampling Sites – 2009-2010
+seeps <- vect("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/W3_synoptic_water_sampling_sites.shp") %>% as_tibble()
+  filter(ID %in% c("seep1", "seep2", "seep3", "seep3A"))
+  as_tibble()
+plot(w3_outline)
+points(seeps)
+
+# 2015 sampling sites
+seeps15 <- read_csv("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/synoptic_surface_water_chemistry_survey2015.csv") %>% 
+  filter(wshed == "ws3", type == "seep")
+
+
+
 
 # Read in data sources ####
 #most recent soil map
@@ -165,8 +182,7 @@ john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>%
 
 
 ## My passive seismic measurements #########
-seis <- read_sheet("https://docs.google.com/spreadsheets/d/1lZ2OcMzP__2jjh9WS54Y9cm_KP4eASWoAppsooTLick/edit?gid=744520605#gid=744520605",
-                    sheet = "combined") %>% 
+seis <- read_csv("HB_HVSR_10_13_25.csv") %>% 
   select(grilla_number, lat, long, quality, depth) %>% 
   filter(quality != "not sesame") %>% 
   filter(depth != "#DIV/0") %>% 
@@ -360,14 +376,6 @@ hill <- rast(hillshade_location) %>%
   crop(w3_outline) %>% 
   mask(w3_outline)
 
-#ybounds <- c(4870350,4871350)
-#xbounds <- c(281350, 282150)
-#crop to rectangular area
-#crop1 <- crop(m1, ext(c(xbounds, ybounds)))
-#writeRaster(crop1, "1mdemw3_cropped.tif")
-plot(mask_dem)
-
-
 
 # Viridis plot
 ggplot()+
@@ -381,7 +389,7 @@ ggplot()+
   geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
   scale_fill_viridis_c(na.value = "transparent", alpha = 0.7, name = "Depth (m)")+
     geom_sf(data = w3_stream, colour = "lightgray") +
-geom_sf(data = as.contour(m11, nlevels = 30), color = "white", alpha = 0.3)+
+geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.3)+
   ggspatial::annotation_scale(location = 'tr',
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))
@@ -406,8 +414,10 @@ ggplot()+
 
   new_scale_fill()+
 geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
-  #geom_sf(data = dd, aes(color = (depth)), pch = 19, size = 3) +
-  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+geom_text(data = seeps, aes(label = ID, geometry = geometry),
+                     stat = "sf_coordinates",
+                     nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
   #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
   #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
   #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
@@ -449,11 +459,68 @@ geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21)
 test %>% 
   ggplotly()
 
+# plot of where validation points were good or bad
+# calculate RMSE using validation split, return it
+errors <- extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>% 
+  mutate(error = depth - var1.pred_var1.pred)
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+# geom_sf(data = errors, aes(fill = error), size = 3, pch = 21) +
+#   scale_fill_gradient2()+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+
 ```
+```{r}
+# try to use mapview and mapedit to manually select stream reaches of interest
+
+m <- mapview(st_as_sf(w3_regime), legend = TRUE)
+m
+W2 <- w3_regime[c(90, 9, 91, 7, 8, 10, 11, 41, 78),]
+W2 <- terra::aggregate(W2)
+W3 <- w3_regime[c(77, 33, 75, 76),]
+E3 <- w3_regime[c(2, 3, 4, 5, 13, 16, 65),]
+E4 <- w3_regime[c(14, 25, 70),]
+
+plot(W2, add = TRUE, col = "red")
+
+# testing generating points along lines
+plot(w3_regime)
+
+# find total length first, then use to generate points along line
+points_along_line <- spsample(as(st_as_sf(W2), "Spatial"), n = 100, type = "regular")
+points(points_along_line)
+
+# now all I have to do is extract values from the depth-DEM and I can plot again
+bedrock_topo <- rast(bedrock_topo_location)
+bedrock_surface <- extract(bedrock_topo, vect(points_along_line), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
+
+# This doesn't look right, once again failed to do this, will have to do it later in ARC
+```
+
 ```{r depressions-plot}
 # prepare kriging output
 
-k_resamp <- resample(k_crop, dem10, method = "bilinear")
+k_resamp <- resample(k_terra, dem1, method = "bilinear")
 plot(dem1 - k_resamp)
 # Save bedrock topography raster
 bedrock_topo_location <- "bedrock_topo.tif"
@@ -530,7 +597,7 @@ plot(rast(surface_hillshade) - mask(rast(bedrock_hillshade), w3_outline))
 # fill DEM just in case
 fill_output <- "./w3_dems/10mdem_fill.tif"
 wbt_fill_depressions_wang_and_liu(
-  dem = breach_output,
+  dem = dem10_location,
   output = fill_output
 )
 
@@ -564,13 +631,24 @@ curve10 <- spatialEco::curvature(dem10, type = "planform")
 
 ```
 ```{r extract-values}
+#flow accumulation/drainage area
+flowacc_output <- paste0(arsenal,"/w3_dems/10mdem_flowacc.tif")
+
+#Slope
+slope_output <- paste0(arsenal,"/w3_dems/10mdem_slope.tif")
+
+#calculate TPI
+tpi_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
+
+#TWI
+twi_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
 w3_uaa <- extract(rast(flowacc_output), 
                   w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("uaa" = `X10mdem_flowacc`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
 
-w3_tpi <- extract(rast(tpi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
+w3_tpi <- extract(rast(tpi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) #%>% 
   rename("tpi" = `X10mdem_tpi`) %>% 
   as_tibble() %>% 
   pivot_longer(-ID)
@@ -1480,17 +1558,7 @@ extract(dem)
 mask_dem_location <- paste0(arsenal, "/w3_dems/1mdem_w3_masked.tif")
 fill_output <- "./w3_dems/10mdem_fill.tif"
 
-#flow accumulation/drainage area
-flowacc_output <- paste0(arsenal,"/w3_dems/10mdem_flowacc.tif")
 
-#Slope
-slope_output <- paste0(arsenal,"/w3_dems/10mdem_slope.tif")
-
-#calculate TPI
-tpi_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
-
-#TWI
-twi_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
 
 w3_uaa <- 
   extract(rast(flowacc_output), combin_norm, ID = FALSE, bind = TRUE) %>% 
