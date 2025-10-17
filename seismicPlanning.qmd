@@ -183,11 +183,11 @@ john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>%
 
 ## My passive seismic measurements #########
 seis <- read_csv("HB_HVSR_10_13_25.csv") %>% 
-  select(grilla_number, lat, long, quality, depth) %>% 
-  filter(quality != "not sesame") %>% 
+  select(grilla_number, lat, long, depth) %>% 
+  #filter(quality != "not sesame") %>% 
   filter(depth != "#DIV/0") %>% 
-  mutate(depth = as.numeric(depth)) %>% 
-  na.omit()
+  mutate(depth = as.numeric(depth)) #%>% 
+  
 seis$depth <- as.numeric(seis$depth)
 
 seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE) %>% 
@@ -298,7 +298,7 @@ combin_norm <- vect(all_sources)
 ggplot()+
   geom_sf(data = w3_outline, fill = NA, alpha = 0.3, lwd = 1)+
   geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+  geom_sf(data = combin_norm, aes(fill = depth), size = 1, pch = 21) +
   
   scale_fill_gradient(high = "#27408B", low = "white")+
   facet_wrap(~source, ncol= 4)+
@@ -355,6 +355,7 @@ k <- krige(depth~1, training_sf, grd, v.m)
 # calculate RMSE using validation split, return it
 extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>% 
   as_tibble() %>% 
+  drop_na() %>% 
   summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
 
 # Save Raster output
@@ -414,10 +415,13 @@ ggplot()+
 
   new_scale_fill()+
 geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
-geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
-geom_text(data = seeps, aes(label = ID, geometry = geometry),
-                     stat = "sf_coordinates",
-                     nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+  #add point locations of seismic measurements
+    geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
+#geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+# geom_text(data = seeps, aes(label = ID, geometry = geometry),
+#                      stat = "sf_coordinates",
+#                      nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
   #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
   #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
   #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
@@ -433,31 +437,6 @@ geom_text(data = seeps, aes(label = ID, geometry = geometry),
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))+
     guides(colour = guide_coloursteps(show.limits = TRUE))
-
-# Plotly plot- not finished
-# to plot 
-test <- ggplot()+
-  theme_void()+
-  geom_spatraster(data = hill)+
-  theme_void()+
-  #theme(legend.position = "")+
-  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-                       na.value = "transparent",
-                       guide = "none")+
-    new_scale_fill() +
-  #theme(legend.position = "")+
-  geom_spatraster(data = k_terra, 
-                  aes(fill = var1.pred_var1.pred),
-                  alpha = 0.7)+
-    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
-  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
-      geom_sf(data = w3_regime, colour = "lightgray") +
-
-  new_scale_fill()+
-geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) 
-
-test %>% 
-  ggplotly()
 
 # plot of where validation points were good or bad
 # calculate RMSE using validation split, return it
