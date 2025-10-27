@@ -6,7 +6,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-## Seismic field plan for summer 24
+# Setup
 
 Gathering datasets to use to plan where seismic measurements will be made.
 
@@ -20,7 +20,8 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        RColorBrewer, # set up color scales for plots later
        plotly,
        mapedit,
-       lwgeom # function to split lines at points
+       lwgeom, # function to split lines at points
+       VSURF # random forest variable selection methods
        )
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
@@ -40,15 +41,25 @@ dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
 dem1 <- rast(dem_location) %>% 
   crop(w3_outline) %>% 
   mask(w3_outline)
+dem3 <- aggregate(rast(dem_location), 3) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+dem5 <- aggregate(rast(dem_location), 5) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
 dem10 <- aggregate(rast(dem_location), 10) %>% 
   crop(w3_outline) %>% 
   mask(w3_outline)
 #save raster, because whitebox wants it is a files location instead of an object in R
-dem10_location <- paste0(arsenal, "/w3_dems/10mdem.tif")
 dem1_location <- paste0(arsenal, "/w3_dems/1mdem.tif")
+dem3_location <- paste0(arsenal, "/w3_dems/3mdem.tif")
+dem5_location <- paste0(arsenal, "/w3_dems/5mdem.tif")
+dem10_location <- paste0(arsenal, "/w3_dems/10mdem.tif")
 
-writeRaster(dem10, dem10_location, overwrite = TRUE)
 writeRaster(dem1, dem1_location, overwrite = TRUE)
+writeRaster(dem3, dem3_location, overwrite = TRUE)
+writeRaster(dem5, dem5_location, overwrite = TRUE)
+writeRaster(dem10, dem10_location, overwrite = TRUE)
 
 
 plot(dem10)
@@ -77,7 +88,7 @@ w3_stic_location <- "w3_stic_locs.shp"
 
 # SEEP LOCATIONS
 # Hubbard Brook Experimental Forest: W3 Surface Water Sampling Sites – 2009-2010
-seeps <- vect("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/W3_synoptic_water_sampling_sites.shp") %>% as_tibble()
+seeps <- vect("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/W3_synoptic_water_sampling_sites.shp") %>% #as_tibble()
   filter(ID %in% c("seep1", "seep2", "seep3", "seep3A"))
   as_tibble()
 plot(w3_outline)
@@ -316,6 +327,7 @@ ggplot()+
         axis.line.y = element_blank())
 ```
 
+# Kriging
 Krig again, but per Yang's suggestion exclude a validation dataset and use it to calculate RMSE
 ```{r krig-with-split}
 # Krig with validation split
@@ -415,7 +427,7 @@ ggplot()+
 
   new_scale_fill()+
 geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
-#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
   #add point locations of seismic measurements
     geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
 #geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
@@ -461,8 +473,8 @@ ggplot()+
       geom_sf(data = w3_regime, colour = "lightgray") +
 
   new_scale_fill()+
-# geom_sf(data = errors, aes(fill = error), size = 3, pch = 21) +
-#   scale_fill_gradient2()+
+geom_sf(data = errors, aes(fill = error), size = 3, pch = 21) +
+  scale_fill_gradient2()+
   ggspatial::annotation_scale(location = 'tr',
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))+
@@ -571,7 +583,7 @@ plot(rast(surface_hillshade) - mask(rast(bedrock_hillshade), w3_outline))
 
 ```
 
-
+# Zonal stats
 ```{r calculate-topo}
 # fill DEM just in case
 fill_output <- "./w3_dems/10mdem_fill.tif"
@@ -621,25 +633,30 @@ tpi_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
 
 #TWI
 twi_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
-w3_uaa <- extract(rast(flowacc_output), 
+w3_uaa <- 
+  extract(rast(flowacc_output), 
                   w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("uaa" = `X10mdem_flowacc`) %>% 
   as_tibble() %>% 
+    select(-wshed) %>% 
   pivot_longer(-ID)
 
-w3_tpi <- extract(rast(tpi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) #%>% 
+w3_tpi <- extract(rast(tpi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("tpi" = `X10mdem_tpi`) %>% 
   as_tibble() %>% 
+    select(-wshed) %>% 
   pivot_longer(-ID)
 
 w3_twi <- extract(rast(twi_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("twi" = `X10mdem_twi`) %>% 
   as_tibble() %>% 
+    select(-wshed) %>% 
   pivot_longer(-ID)
 
 w3_slope <- extract(rast(slope_output), w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
   rename("slope" = `X10mdem_slope`) %>% 
   as_tibble() %>% 
+    select(-wshed) %>% 
   pivot_longer(-ID)
 
 w3_curve <- extract(curve10, w3_stic_locs_r) %>% 
@@ -662,6 +679,7 @@ plot(rast(w3_surface_sheds), col = my_colors)
 # topographic metrics at 10 m resolution
 # curvature, upslope area, upslope volume, total depression volume upslope
 zones <- rast(w3_surface_sheds)
+plot(zones)
 # Zonal function- take zonal statistics
 # evelation
 dem_r  <- resample(project(dem10, zones), zones, method="bilinear")
@@ -684,7 +702,7 @@ colnames(zone_stats_surface) <- c("ID", "Elevation (m)", "Planform Curvature", "
 
 zone_stats_surface %>% 
   left_join(pks_w3, by = "ID") %>% 
-    left_join(z_surface, by = "ID") %>% 
+   # left_join(z_surface, by = "ID") %>% 
   select(-wshed) %>% 
   pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
 group_by(names) %>% 
@@ -730,7 +748,7 @@ colnames(zone_stats_subsurface) <- c("ID", "Elevation (m)", "Planform Curvature"
 
 zone_stats_subsurface %>% 
   left_join(pks_w3, by = "ID") %>% 
-    left_join(z_subsurface, by = "ID") %>% 
+    #left_join(z_subsurface, by = "ID") %>% 
   select(-wshed) %>% 
   pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
 group_by(names) %>% 
@@ -777,7 +795,7 @@ colnames(zone_stats_whole) <- c("ID", "Elevation (m)", "Planform Curvature", "Su
 # surface
 surface_stats <- zone_stats_surface %>% 
   left_join(pks_w3, by = "ID") %>% 
-  left_join(z_surface, by = "ID") %>% 
+  #left_join(z_surface, by = "ID") %>% 
   select(-wshed) %>% 
   pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>%
   mutate(type = "Surface")
@@ -785,7 +803,7 @@ surface_stats <- zone_stats_surface %>%
 # subsurface
 sub_stats <- zone_stats_subsurface %>% 
   left_join(pks_w3, by = "ID") %>% 
-  left_join(z_subsurface, by = "ID") %>% 
+  #left_join(z_subsurface, by = "ID") %>% 
   select(-wshed) %>% 
   pivot_longer(c(-pk, -ID), values_to = "value", names_to = "names") %>% 
   mutate(type = "Subsurface")
@@ -1489,7 +1507,594 @@ Sanity check- take all observations not used in krig- holes not to bedrock- and 
 
 ```
 
-## DEPREC
+# RF to try to tell a story
+Create input dataset to RF...
+Different neighborhoods and different spatial scales of topography and depth, to try and predict flow permanence and baseflow flow permanence
+```{r}
+# come up with a set of functions to extract relevant topography and subsurface neighborhoods
+# dem_locations
+plot(rast(dem1_location))
+plot(rast(dem3_location))
+plot(rast(dem5_location))
+plot(rast(dem10_location))
+### fill DEMs #####
+fill1_output <- paste0(arsenal,"/w3_dems/1mdem_fill.tif")
+fill3_output <- paste0(arsenal,"/w3_dems/3mdem_fill.tif")
+fill5_output <- paste0(arsenal,"/w3_dems/5mdem_fill.tif")
+fill10_output <- paste0(arsenal,"/w3_dems/10mdem_fill.tif")
+
+wbt_fill_depressions_wang_and_liu(
+  dem = dem1_location,
+  output = fill1_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem3_location,
+  output = fill3_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem5_location,
+  output = fill5_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem10_location,
+  output = fill10_output
+)
+### Drainage area ####
+flowacc1_output <- paste0(arsenal,"/w3_dems/1mdem_flowacc.tif")
+flowacc3_output <- paste0(arsenal,"/w3_dems/3mdem_flowacc.tif")
+flowacc5_output <- paste0(arsenal,"/w3_dems/5mdem_flowacc.tif")
+flowacc10_output <- paste0(arsenal,"/w3_dems/10mdem_flowacc.tif")
+wbt_d_inf_flow_accumulation(input = fill1_output,
+                            output = flowacc1_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill3_output,
+                            output = flowacc3_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill5_output,
+                            output = flowacc5_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill10_output,
+                            output = flowacc10_output,
+                            out_type = "Specific Contributing Area")
+### Slope ####
+slope1_output <- paste0(arsenal,"/w3_dems/1mdem_slope.tif")
+slope3_output <- paste0(arsenal,"/w3_dems/3mdem_slope.tif")
+slope5_output <- paste0(arsenal,"/w3_dems/5mdem_slope.tif")
+slope10_output <- paste0(arsenal,"/w3_dems/10mdem_slope.tif")
+
+wbt_slope(dem = fill1_output,
+          output = slope1_output,
+          units = "degrees")
+wbt_slope(dem = fill3_output,
+          output = slope3_output,
+          units = "degrees")
+wbt_slope(dem = fill5_output,
+          output = slope5_output,
+          units = "degrees")
+wbt_slope(dem = fill10_output,
+          output = slope10_output,
+          units = "degrees")
+### TPI ####
+tpi1_output <- paste0(arsenal,"/w3_dems/1mdem_tpi.tif")
+tpi3_output <- paste0(arsenal,"/w3_dems/3mdem_tpi.tif")
+tpi5_output <- paste0(arsenal,"/w3_dems/5mdem_tpi.tif")
+tpi10_output <- paste0(arsenal,"/w3_dems/10mdem_tpi.tif")
+
+# diff resolutions, but the same kernel size
+wbt_relative_topographic_position(
+    dem = fill1_output, 
+    output = tpi1_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill3_output, 
+    output = tpi3_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill5_output, 
+    output = tpi5_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill10_output, 
+    output = tpi10_output, 
+    filterx=11, 
+    filtery=11)
+### TWI ####
+twi1_output <- paste0(arsenal,"/w3_dems/1mdem_twi.tif")
+twi3_output <- paste0(arsenal,"/w3_dems/3mdem_twi.tif")
+twi5_output <- paste0(arsenal,"/w3_dems/5mdem_twi.tif")
+twi10_output <- paste0(arsenal,"/w3_dems/10mdem_twi.tif")
+
+wbt_wetness_index(sca = flowacc1_output, #flow accumulation
+                  slope = slope1_output,
+                  output = twi1_output)
+wbt_wetness_index(sca = flowacc3_output, #flow accumulation
+                  slope = slope3_output,
+                  output = twi3_output)
+wbt_wetness_index(sca = flowacc5_output, #flow accumulation
+                  slope = slope5_output,
+                  output = twi5_output)
+wbt_wetness_index(sca = flowacc10_output, #flow accumulation
+                  slope = slope10_output,
+                  output = twi10_output)
+### Curve ####
+#1m
+curve1_plan_output <- paste0(arsenal,"/w3_dems/1mdem_curve_plan.tif")
+curve1_prof_output <- paste0(arsenal,"/w3_dems/1mdem_curve_prof.tif")
+curve1_plan <- spatialEco::curvature(rast(dem1_location), type = "planform")
+curve1_prof <- spatialEco::curvature(rast(dem1_location), type = "profile")
+writeRaster(curve1_plan, curve1_plan_output, overwrite = TRUE)
+writeRaster(curve1_prof, curve1_prof_output, overwrite = TRUE)
+#3m 
+curve3_plan_output <- paste0(arsenal,"/w3_dems/3mdem_curve_plan.tif")
+curve3_prof_output <- paste0(arsenal,"/w3_dems/3mdem_curve_prof.tif")
+curve3_plan <- spatialEco::curvature(rast(dem3_location), type = "planform")
+curve3_prof <- spatialEco::curvature(rast(dem3_location), type = "profile")
+writeRaster(curve3_plan, curve3_plan_output, overwrite = TRUE)
+writeRaster(curve3_prof, curve3_prof_output, overwrite = TRUE)
+#5m
+curve5_plan_output <- paste0(arsenal,"/w3_dems/5mdem_curve_plan.tif")
+curve5_prof_output <- paste0(arsenal,"/w3_dems/5mdem_curve_prof.tif")
+curve5_plan <- spatialEco::curvature(rast(dem5_location), type = "planform")
+curve5_prof <- spatialEco::curvature(rast(dem5_location), type = "profile")
+writeRaster(curve5_plan, curve5_plan_output, overwrite = TRUE)
+writeRaster(curve5_prof, curve5_prof_output, overwrite = TRUE)
+#10m
+curve10_plan_output <- paste0(arsenal,"/w3_dems/10mdem_curve_plan.tif")
+curve10_prof_output <- paste0(arsenal,"/w3_dems/10mdem_curve_prof.tif")
+curve10_plan <- spatialEco::curvature(rast(dem10_location), type = "planform")
+curve10_prof <- spatialEco::curvature(rast(dem10_location), type = "profile")
+writeRaster(curve10_plan, curve10_plan_output, overwrite = TRUE)
+writeRaster(curve10_prof, curve10_prof_output, overwrite = TRUE)
+
+### Resamp Depth ####
+depth1 <- k_terra
+depth3 <- aggregate(k_terra, 3)
+depth5 <- aggregate(k_terra, 5)
+depth10 <- aggregate(k_terra, 10)
+
+### Extracting point values ####
+point_values <- 
+  extract(rast(flowacc10_output), 
+                  w3_stic_locs_r, ID = FALSE, bind = TRUE) %>% 
+  extract(rast(flowacc5_output), 
+                  ., ID = FALSE, bind = TRUE) %>% 
+  extract(rast(flowacc3_output), 
+                  ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(flowacc1_output), 
+                  ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope10_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope1_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(tpi10_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(tpi5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(tpi3_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(tpi1_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(twi10_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(twi5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(twi3_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(twi1_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(curve10_plan, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve10_prof, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve5_plan, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve5_prof, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve3_plan, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve3_prof, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve1_plan, ., ID = FALSE, bind = TRUE) %>%
+  extract(curve1_prof, ., ID = FALSE, bind = TRUE) %>%
+  extract(depth10, ., ID = FALSE, bind = TRUE) %>%
+  extract(depth5, ., ID = FALSE, bind = TRUE) %>%
+  extract(depth3, ., ID = FALSE, bind = TRUE) %>%
+  extract(depth1, ., ID = FALSE, bind = TRUE) %>%
+  as_tibble()
+point_values_comb <- point_values %>%
+  rename_with(~ paste0("point_values", .x))
+  
+### extract by neighborhoods ####
+# create different sized buffers around points, then conduct zonal on them
+buffer1 <- terra::buffer(w3_stic_locs_r, width = 1)
+buffer10 <- terra::buffer(w3_stic_locs_r, width = 10)
+buffer20 <- terra::buffer(w3_stic_locs_r, width = 20)
+buffer100 <- terra::buffer(w3_stic_locs_r, width = 100)
+
+buffed_1m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
+        rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth3m" = "var1.pred_var1.pred"), 
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth1m" = "var1.pred_var1.pred"),
+rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+                "total_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth3m" = "var1.pred_var1.pred"),
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth1m" = "var1.pred_var1.pred")
+         ) %>% 
+  as_tibble()
+
+buffer1 <- buffer10
+buffed_10m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
+         rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth3m" = "var1.pred_var1.pred"), 
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth1m" = "var1.pred_var1.pred"),
+rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+                "total_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth3m" = "var1.pred_var1.pred"),
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth1m" = "var1.pred_var1.pred")
+         ) %>% 
+  as_tibble()
+
+buffer1 <- buffer20
+buffed_20m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
+         rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth3m" = "var1.pred_var1.pred"), 
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth1m" = "var1.pred_var1.pred"),
+rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+                "total_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth3m" = "var1.pred_var1.pred"),
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth1m" = "var1.pred_var1.pred")
+         ) %>% 
+  as_tibble()
+
+buffer1 <- buffer100
+buffed_100m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
+         zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
+rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth3m" = "var1.pred_var1.pred"), 
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "mean_depth1m" = "var1.pred_var1.pred"),
+rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+                "total_depth10m" = "var1.pred_var1.pred"),
+rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth5m" = "var1.pred_var1.pred"),
+rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth3m" = "var1.pred_var1.pred"),
+rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+                "total_depth1m" = "var1.pred_var1.pred")
+         ) %>% 
+  as_tibble()
+buffed_1m_comb <- buffed_1m %>%
+  rename_with(~ paste0("nb1m_", .x))
+buffed_10m_comb <- buffed_10m %>%
+  rename_with(~ paste0("nb10m_", .x))
+buffed_20m_comb <- buffed_20m %>%
+  rename_with(~ paste0("nb20m_", .x))
+buffed_100m_comb <- buffed_100m %>%
+  rename_with(~ paste0("nb100m_", .x))
+
+#still need to combine all of these
+all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb) %>% 
+  select(-point_valuesID, -point_valueswshed)
+### extract by watersheds ####
+zones <- rast(w3_surface_sheds)
+plot(zones)
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+
+wshed_zones <- tibble(
+  slope10m_wshed = zonal(resample(project(rast(slope10_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  slope5m_wshed = zonal(resample(project(rast(slope5_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  slope3m_wshed = zonal(resample(project(rast(slope3_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  slope1m_wshed = zonal(resample(project(rast(slope1_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  tpi10m_wshed = zonal(resample(project(rast(tpi10_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  tpi5m_wshed = zonal(resample(project(rast(tpi5_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  tpi3m_wshed = zonal(resample(project(rast(tpi3_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  tpi1m_wshed = zonal(resample(project(rast(tpi1_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  twi10m_wshed = zonal(resample(project(rast(twi10_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  twi5m_wshed = zonal(resample(project(rast(twi5_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  twi3m_wshed = zonal(resample(project(rast(twi3_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  twi1m_wshed = zonal(resample(project(rast(twi1_output)
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve10mplan_wshed = zonal(resample(project(curve10_plan
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve10mprof_wshed = zonal(resample(project(curve10_prof
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve5mplan_wshed = zonal(resample(project(curve5_plan
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve5mprof_wshed = zonal(resample(project(curve5_prof
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve3mplan_wshed = zonal(resample(project(curve3_plan
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve3mprof_wshed = zonal(resample(project(curve3_prof
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve1mplan_wshed = zonal(resample(project(curve1_plan
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  curve1mprof_wshed = zonal(resample(project(curve1_prof
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  avgdepth10m_wshed = zonal(resample(project(depth10
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  avgdepth5m_wshed = zonal(resample(project(depth5
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  avgdepth3m_wshed = zonal(resample(project(depth3
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  avgdepth1m_wshed = zonal(resample(project(depth1
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  totaldepth10m_wshed = zonal(resample(project(depth10
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2],
+  totaldepth5m_wshed = zonal(resample(project(depth5
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2],
+  totaldepth3m_wshed = zonal(resample(project(depth3
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2],
+  totaldepth1m_wshed = zonal(resample(project(depth1
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2]
+  
+)
+
+all <- bind_cols(point_values_comb, wshed_zones) %>% 
+  select(-point_valuesID, -point_valueswshed)
+all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
+  select(-point_valuesID, -point_valueswshed)
+### extract by neighbors in watersheds ####
+# 1m, 5m, 10m, 100m neighborhoods
+# slope, curvature, average depth, total volume, TWI, one drainage area 
+
+# within drainage areas
+# immediate area
+```
+
+
+
+RF example from textbook
+```{r}
+p_load(randomForest, kernlab)
+# set up spam data set
+data("spam", package = "kernlab")
+set.seed(9146301) 
+levels(spam$type) <- c("ok", "spam")
+yTable <- table(spam$type)
+indApp <- c(sample(1:yTable[2], yTable[2]/2), sample((yTable[2] + 1):nrow(spam), yTable[1]/2))
+spamApp <- spam[indApp, ]
+spamTest <- spam[-indApp, ]
+
+# run RF on spam dataset
+RFDef <- randomForest(type ~ ., data = spamApp)
+RFDef
+plot(RFDef)
+
+RFDoTrace <- randomForest(type ~ ., data = spamApp, ntree = 50, do.trace = 25)
+
+RFDefImp <- randomForest(type ~ ., data = spamApp, importance = TRUE)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(spamApp) - 1, cex = 0.8, main = "Variable importance")
+```
+
+Try predicting straight up depth, but also depth classes
+```{r}
+all_df <- as.data.frame(all)
+RFDef <- randomForest(point_valuespk ~ ., data = all_df)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = all, importance = TRUE)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = 10, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDefImp)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+impvar1 <- impvar[1:10]
+op <- par(mfrow=c(2, 5))
+for (i in seq_along(impvar1)) {
+    partialPlot(RFDefImp, all_df, impvar1[i], xlab=impvar1[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1)
+}
+par(op)
+```
+
+```{r figuring-out-VSURF}
+#p_load(VSURF)
+vsurfSpam <- VSURF(point_valuespk ~ ., all, parallel = TRUE, ncores = 3, clusterType = "FORK", ntree = 500)
+vsurfSpam
+summary(vsurfSpam)
+plot(vsurfSpam)
+colnames(all[vsurfSpam$varselect.interp])
+colnames(all[vsurfSpam$varselect.pred])
+
+inputs <- all_df[colnames(all[vsurfSpam$varselect.interp])]
+
+
+
+vsurfSpamPred <- VSURF_pred(point_valuespk ~  ., all, nmj = 15, err.interp = vsurfSpam$err.interp, varselect.interp = vsurfSpam$varselect.interp)
+colnames(all[vsurfSpamPred$varselect.pred])
+plot(vsurfSpamPred)
+all[vsurfSpamPred$varselect.pred]
+
+varImpPlot(RFDefImp, type = 1, scale = FALSE, main = "Variable importance")
+partialPlot(vsurfSpamPred, pred.data = as.data.frame(all), x.var = "point_valuespk", main = "point_valuespk")
+
+#no training split
+all_df <- as.data.frame(all)
+
+iris.learn <- sample(1:nrow(all_df), nrow(all_df))
+iris.vsurf <- VSURF(all_df[,-1], all_df[, 1])
+colnames(all_df[iris.vsurf$varselect.interp])
+colnames(all_df[iris.vsurf$varselect.pred])
+
+
+iris.predictions <- predict(iris.vsurf, newdata = all_df[, -1], step = "pred")
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df[, 1]) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+#training split
+iris.learn <- sample(1:nrow(all_df), nrow(all_df)*0.7)
+iris.vsurf <- VSURF(all_df[iris.learn, -1], all_df[iris.learn, 1],
+                            step = "pred")
+iris.predictions <- predict(iris.vsurf, newdata = all_df[-iris.learn, -1])
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df[-iris.learn, 1]) %>% 
+  summarise(RMSE = sqrt(mean((actual - pred)^2)))
+```
+
+# DEPREC
 ```{r orginal krig chunk}
 # # chunk that will run the variogram calculation and run kriging model
 # 
