@@ -427,7 +427,7 @@ ggplot()+
 
   new_scale_fill()+
 geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
-geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
   #add point locations of seismic measurements
     geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
 #geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
@@ -1994,18 +1994,28 @@ all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_
 #creating zone in shed function
 # input_dataset <- depth10
  buffer_dataset <- buffer10
+plot(rast(w3_surface_sheds))
+text(vect("mod_bed_points.shp"), cex = 0.75)
+plot(buffer10, add = TRUE)
+text(buffer10, cex = 0.75)
+
 # col_name <- "wsnb100_depth10"
 
 ## BIG MISMATCH BETWEEN THE ID COLUMN OF WSHED ZONES AND ID OF PK POINTS
 
 #zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
 #for(i in 1:length(buffer_dataset$ID)){
-i <- 30
-  ID <- buffer_dataset$ID[i]
+i <- 29
+input_dataset <- rast(flowacc10_output)
+buffer_dataset <- buffer1
+col_name <- "wsnb100_depth10"
+  ID <- 30
   zones <- rast(w3_surface_sheds)
 
   zones[zones != ID] <- NA
   zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
+  plot(zones)
+  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
   input_resamp  <- resample(project(input_dataset, zones_masked), 
                             zones_masked, method="bilinear")
   output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
@@ -2018,148 +2028,164 @@ i <- 30
 }
 zone_in_shed(
   depth10,
-  buffer10,
+  buffer1,
   "wsnb100_depth10"
 )
-# input_dataset <- depth10
-# buffer_dataset <- buffer100
-# col_name <- "wsnb100_depth10"
-buffer1 <- terra::buffer(w3_stic_locs_r, width = 1)
-buffer10 <- terra::buffer(w3_stic_locs_r, width = 10)
-buffer20 <- terra::buffer(w3_stic_locs_r, width = 20)
-buffer100 <- terra::buffer(w3_stic_locs_r, width = 100)
+
+
+buffer1 <- terra::buffer(vect("mod_bed_points.shp"), width = 1) %>% 
+  mutate(ID = FID + 1)
+buffer10 <- terra::buffer(vect("mod_bed_points.shp"), width = 10) %>% 
+  mutate(ID = FID + 1)
+buffer20 <- terra::buffer(vect("mod_bed_points.shp"), width = 20) %>% 
+  mutate(ID = FID + 1)
+buffer100 <- terra::buffer(vect("mod_bed_points.shp"), width = 100) %>% 
+  mutate(ID = FID + 1)
 
 #### Buffer 1 ####
-wsnb1 <- left_join(
-    zone_in_shed(rast(flowacc10_output), buffer1, "wsnb1_flowacc10"),
-    zone_in_shed(rast(flowacc5_output), buffer1, "wsnb1_flowacc5"),
-    zone_in_shed(rast(flowacc3_output), buffer1, "wsnb1_flowacc3"),
-    zone_in_shed(rast(flowacc1_output), buffer1, "wsnb1_flowacc1"),
-    zone_in_shed(rast(slope10_output), buffer1, "wsnb1_slope10"),
-    zone_in_shed(rast(slope5_output), buffer1, "wsnb1_slope5"),
-    zone_in_shed(rast(slope3_output), buffer1, "wsnb1_slope3"),
-    zone_in_shed(rast(slope1_output), buffer1, "wsnb1_slope1"),
-    zone_in_shed(rast(tpi10_output), buffer1, "wsnb1_tpi10"),
-    zone_in_shed(rast(tpi5_output), buffer1, "wsnb1_tpi5"),
-    zone_in_shed(rast(tpi3_output), buffer1, "wsnb1_tpi3"),
-    zone_in_shed(rast(tpi1_output), buffer1, "wsnb1_tpi1"),
-    zone_in_shed(rast(twi10_output), buffer1, "wsnb1_twi10"),
-    zone_in_shed(rast(twi5_output), buffer1, "wsnb1_twi5"),
-    zone_in_shed(rast(twi3_output), buffer1, "wsnb1_twi3"),
-    zone_in_shed(rast(twi1_output), buffer1, "wsnb1_twi1"),
-    zone_in_shed(curve10_plan, buffer1, "wsnb1_curve10_plan"),
-    zone_in_shed(curve10_prof, buffer1, "wsnb1_curve10_prof"),
-    zone_in_shed(curve5_plan, buffer1, "wsnb1_curve5_plan"),
-    zone_in_shed(curve5_prof, buffer1, "wsnb1_curve5_prof"),
-    zone_in_shed(curve3_plan, buffer1, "wsnb1_curve3_plan"),
-    zone_in_shed(curve3_prof, buffer1, "wsnb1_curve3_prof"),
-    zone_in_shed(curve1_plan, buffer1, "wsnb1_curve1_plan"),
-    zone_in_shed(curve1_prof, buffer1, "wsnb1_curve1_prof"),
-    zone_in_shed(depth10, buffer1, "wsnb1_depth10"),
-    zone_in_shed(depth5, buffer1, "wsnb1_depth5"),
-    zone_in_shed(depth3, buffer1, "wsnb1_depth3"),
-    zone_in_shed(depth1, buffer1, "wsnb1_depth1")
+Sys.time()
+wsnb1 <- 
+  full_join(
+      zone_in_shed(rast(flowacc10_output), buffer1, "wsnb1_flowacc10"),
+      zone_in_shed(rast(flowacc5_output), buffer1, "wsnb1_flowacc5")) %>% 
+    full_join(zone_in_shed(rast(flowacc3_output), buffer1, "wsnb1_flowacc3")) %>% 
+    full_join(zone_in_shed(rast(flowacc1_output), buffer1, "wsnb1_flowacc1")) %>%
+    full_join(zone_in_shed(rast(slope10_output), buffer1, "wsnb1_slope10")) %>%
+    full_join(zone_in_shed(rast(slope5_output), buffer1, "wsnb1_slope5")) %>%
+    full_join(zone_in_shed(rast(slope3_output), buffer1, "wsnb1_slope3")) %>%
+    full_join(zone_in_shed(rast(slope1_output), buffer1, "wsnb1_slope1")) %>%
+    full_join(zone_in_shed(rast(tpi10_output), buffer1, "wsnb1_tpi10")) %>%
+    full_join(zone_in_shed(rast(tpi5_output), buffer1, "wsnb1_tpi5")) %>%
+    full_join(zone_in_shed(rast(tpi3_output), buffer1, "wsnb1_tpi3")) %>%
+    full_join(zone_in_shed(rast(tpi1_output), buffer1, "wsnb1_tpi1")) %>%
+    full_join(zone_in_shed(rast(twi10_output), buffer1, "wsnb1_twi10")) %>%
+    full_join(zone_in_shed(rast(twi5_output), buffer1, "wsnb1_twi5")) %>%
+    full_join(zone_in_shed(rast(twi3_output), buffer1, "wsnb1_twi3")) %>%
+    full_join(zone_in_shed(rast(twi1_output), buffer1, "wsnb1_twi1")) %>%
+    full_join(zone_in_shed(curve10_plan, buffer1, "wsnb1_curve10_plan")) %>%
+    full_join(zone_in_shed(curve10_prof, buffer1, "wsnb1_curve10_prof")) %>%
+    full_join(zone_in_shed(curve5_plan, buffer1, "wsnb1_curve5_plan")) %>%
+    full_join(zone_in_shed(curve5_prof, buffer1, "wsnb1_curve5_prof")) %>%
+    full_join(zone_in_shed(curve3_plan, buffer1, "wsnb1_curve3_plan")) %>%
+    full_join(zone_in_shed(curve3_prof, buffer1, "wsnb1_curve3_prof")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer1, "wsnb1_curve1_plan")) %>%
+    full_join(zone_in_shed(curve1_prof, buffer1, "wsnb1_curve1_prof")) %>%
+    full_join(zone_in_shed(depth10, buffer1, "wsnb1_depth10")) %>%
+    full_join(zone_in_shed(depth5, buffer1, "wsnb1_depth5")) %>%
+    full_join(zone_in_shed(depth3, buffer1, "wsnb1_depth3")) %>%
+    full_join(zone_in_shed(depth1, buffer1, "wsnb1_depth1")
 
 )
+Sys.time()
 #### Buffer 10 ####
-wsnb10 <- bind_cols(
-    zone_in_shed(rast(flowacc10_output), buffer10, "wsnb10_flowacc10"),
-    zone_in_shed(rast(flowacc5_output), buffer10, "wsnb10_flowacc5"),
-    zone_in_shed(rast(flowacc3_output), buffer10, "wsnb10_flowacc3"),
-    zone_in_shed(rast(flowacc1_output), buffer10, "wsnb10_flowacc1"),
-    zone_in_shed(rast(slope10_output), buffer10, "wsnb10_slope10"),
-    zone_in_shed(rast(slope5_output), buffer10, "wsnb10_slope5"),
-    zone_in_shed(rast(slope3_output), buffer10, "wsnb10_slope3"),
-    zone_in_shed(rast(slope1_output), buffer10, "wsnb10_slope1"),
-    zone_in_shed(rast(tpi10_output), buffer10, "wsnb10_tpi10"),
-    zone_in_shed(rast(tpi5_output), buffer10, "wsnb10_tpi5"),
-    zone_in_shed(rast(tpi3_output), buffer10, "wsnb10_tpi3"),
-    zone_in_shed(rast(tpi1_output), buffer10, "wsnb10_tpi1"),
-    zone_in_shed(rast(twi10_output), buffer10, "wsnb10_twi10"),
-    zone_in_shed(rast(twi5_output), buffer10, "wsnb10_twi5"),
-    zone_in_shed(rast(twi3_output), buffer10, "wsnb10_twi3"),
-    zone_in_shed(rast(twi1_output), buffer10, "wsnb10_twi1"),
-    zone_in_shed(curve10_plan, buffer10, "wsnb10_curve10_plan"),
-    zone_in_shed(curve10_prof, buffer10, "wsnb10_curve10_prof"),
-    zone_in_shed(curve5_plan, buffer10, "wsnb10_curve5_plan"),
-    zone_in_shed(curve5_prof, buffer10, "wsnb10_curve5_prof"),
-    zone_in_shed(curve3_plan, buffer10, "wsnb10_curve3_plan"),
-    zone_in_shed(curve3_prof, buffer10, "wsnb10_curve3_prof"),
-    zone_in_shed(curve1_plan, buffer10, "wsnb10_curve1_plan"),
-    zone_in_shed(curve1_prof, buffer10, "wsnb10_curve1_prof"),
-    zone_in_shed(depth10, buffer10, "wsnb10_depth10"),
-    zone_in_shed(depth5, buffer10, "wsnb10_depth5"),
-    zone_in_shed(depth3, buffer10, "wsnb10_depth3"),
-    zone_in_shed(depth1, buffer10, "wsnb10_depth1")
+wsnb10 <- 
+    zone_in_shed(rast(flowacc10_output), buffer10, "wsnb10_flowacc10") %>% 
+    full_join(zone_in_shed(rast(flowacc5_output), buffer10, "wsnb10_flowacc5")) %>%
+    full_join(zone_in_shed(rast(flowacc3_output), buffer10, "wsnb10_flowacc3")) %>%
+    full_join(zone_in_shed(rast(flowacc1_output), buffer10, "wsnb10_flowacc1")) %>%
+    full_join(zone_in_shed(rast(slope10_output), buffer10, "wsnb10_slope10")) %>%
+    full_join(zone_in_shed(rast(slope5_output), buffer10, "wsnb10_slope5")) %>%
+    full_join(zone_in_shed(rast(slope3_output), buffer10, "wsnb10_slope3")) %>%
+    full_join(zone_in_shed(rast(slope1_output), buffer10, "wsnb10_slope1")) %>%
+    full_join(zone_in_shed(rast(tpi10_output), buffer10, "wsnb10_tpi10")) %>%
+    full_join(zone_in_shed(rast(tpi5_output), buffer10, "wsnb10_tpi5")) %>%
+    full_join(zone_in_shed(rast(tpi3_output), buffer10, "wsnb10_tpi3")) %>%
+    full_join(zone_in_shed(rast(tpi1_output), buffer10, "wsnb10_tpi1")) %>%
+    full_join(zone_in_shed(rast(twi10_output), buffer10, "wsnb10_twi10")) %>%
+    full_join(zone_in_shed(rast(twi5_output), buffer10, "wsnb10_twi5")) %>%
+    full_join(zone_in_shed(rast(twi3_output), buffer10, "wsnb10_twi3")) %>%
+    full_join(zone_in_shed(rast(twi1_output), buffer10, "wsnb10_twi1")) %>%
+    full_join(zone_in_shed(curve10_plan, buffer10, "wsnb10_curve10_plan")) %>%
+    full_join(zone_in_shed(curve10_prof, buffer10, "wsnb10_curve10_prof")) %>%
+    full_join(zone_in_shed(curve5_plan, buffer10, "wsnb10_curve5_plan")) %>%
+    full_join(zone_in_shed(curve5_prof, buffer10, "wsnb10_curve5_prof")) %>%
+    full_join(zone_in_shed(curve3_plan, buffer10, "wsnb10_curve3_plan")) %>%
+    full_join(zone_in_shed(curve3_prof, buffer10, "wsnb10_curve3_prof")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer10, "wsnb10_curve1_plan")) %>%
+    full_join(zone_in_shed(curve1_prof, buffer10, "wsnb10_curve1_prof")) %>%
+    full_join(zone_in_shed(depth10, buffer10, "wsnb10_depth10")) %>%
+    full_join(zone_in_shed(depth5, buffer10, "wsnb10_depth5")) %>%
+    full_join(zone_in_shed(depth3, buffer10, "wsnb10_depth3")) %>%
+    full_join(zone_in_shed(depth1, buffer10, "wsnb10_depth1")
 
 )
 #### Buffer 20 ####
-wsnb20 <- bind_cols(
-    zone_in_shed(rast(flowacc10_output), buffer20, "wsnb20_flowacc10"),
-    zone_in_shed(rast(flowacc5_output), buffer20, "wsnb20_flowacc5"),
-    zone_in_shed(rast(flowacc3_output), buffer20, "wsnb20_flowacc3"),
-    zone_in_shed(rast(flowacc1_output), buffer20, "wsnb20_flowacc1"),
-    zone_in_shed(rast(slope10_output), buffer20, "wsnb20_slope10"),
-    zone_in_shed(rast(slope5_output), buffer20, "wsnb20_slope5"),
-    zone_in_shed(rast(slope3_output), buffer20, "wsnb20_slope3"),
-    zone_in_shed(rast(slope1_output), buffer20, "wsnb20_slope1"),
-    zone_in_shed(rast(tpi10_output), buffer20, "wsnb20_tpi10"),
-    zone_in_shed(rast(tpi5_output), buffer20, "wsnb20_tpi5"),
-    zone_in_shed(rast(tpi3_output), buffer20, "wsnb20_tpi3"),
-    zone_in_shed(rast(tpi1_output), buffer20, "wsnb20_tpi1"),
-    zone_in_shed(rast(twi10_output), buffer20, "wsnb20_twi10"),
-    zone_in_shed(rast(twi5_output), buffer20, "wsnb20_twi5"),
-    zone_in_shed(rast(twi3_output), buffer20, "wsnb20_twi3"),
-    zone_in_shed(rast(twi1_output), buffer20, "wsnb20_twi1"),
-    zone_in_shed(curve10_plan, buffer20, "wsnb20_curve10_plan"),
-    zone_in_shed(curve10_prof, buffer20, "wsnb20_curve10_prof"),
-    zone_in_shed(curve5_plan, buffer20, "wsnb20_curve5_plan"),
-    zone_in_shed(curve5_prof, buffer20, "wsnb20_curve5_prof"),
-    zone_in_shed(curve3_plan, buffer20, "wsnb20_curve3_plan"),
-    zone_in_shed(curve3_prof, buffer20, "wsnb20_curve3_prof"),
-    zone_in_shed(curve1_plan, buffer20, "wsnb20_curve1_plan"),
-    zone_in_shed(curve1_prof, buffer20, "wsnb20_curve1_prof"),
-    zone_in_shed(depth10, buffer20, "wsnb20_depth10"),
-    zone_in_shed(depth5, buffer20, "wsnb20_depth5"),
-    zone_in_shed(depth3, buffer20, "wsnb20_depth3"),
-    zone_in_shed(depth1, buffer20, "wsnb20_depth1")
+wsnb20 <- zone_in_shed(rast(flowacc10_output), buffer20, "wsnb20_flowacc10") %>% 
+  full_join(zone_in_shed(rast(flowacc5_output), buffer20, "wsnb20_flowacc5")) %>%
+    full_join(zone_in_shed(rast(flowacc3_output), buffer20, "wsnb20_flowacc3")) %>%
+    full_join(zone_in_shed(rast(flowacc1_output), buffer20, "wsnb20_flowacc1")) %>%
+    full_join(zone_in_shed(rast(slope10_output), buffer20, "wsnb20_slope10")) %>%
+    full_join(zone_in_shed(rast(slope5_output), buffer20, "wsnb20_slope5")) %>%
+    full_join(zone_in_shed(rast(slope3_output), buffer20, "wsnb20_slope3")) %>%
+    full_join(zone_in_shed(rast(slope1_output), buffer20, "wsnb20_slope1")) %>%
+    full_join(zone_in_shed(rast(tpi10_output), buffer20, "wsnb20_tpi10")) %>%
+    full_join(zone_in_shed(rast(tpi5_output), buffer20, "wsnb20_tpi5")) %>%
+    full_join(zone_in_shed(rast(tpi3_output), buffer20, "wsnb20_tpi3")) %>%
+    full_join(zone_in_shed(rast(tpi1_output), buffer20, "wsnb20_tpi1")) %>%
+    full_join(zone_in_shed(rast(twi10_output), buffer20, "wsnb20_twi10")) %>%
+    full_join(zone_in_shed(rast(twi5_output), buffer20, "wsnb20_twi5")) %>%
+    full_join(zone_in_shed(rast(twi3_output), buffer20, "wsnb20_twi3")) %>%
+    full_join(zone_in_shed(rast(twi1_output), buffer20, "wsnb20_twi1")) %>%
+    full_join(zone_in_shed(curve10_plan, buffer20, "wsnb20_curve10_plan")) %>%
+    full_join(zone_in_shed(curve10_prof, buffer20, "wsnb20_curve10_prof")) %>%
+    full_join(zone_in_shed(curve5_plan, buffer20, "wsnb20_curve5_plan")) %>%
+    full_join(zone_in_shed(curve5_prof, buffer20, "wsnb20_curve5_prof")) %>%
+    full_join(zone_in_shed(curve3_plan, buffer20, "wsnb20_curve3_plan")) %>%
+    full_join(zone_in_shed(curve3_prof, buffer20, "wsnb20_curve3_prof")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer20, "wsnb20_curve1_plan")) %>%
+    full_join(zone_in_shed(curve1_prof, buffer20, "wsnb20_curve1_prof")) %>%
+    full_join(zone_in_shed(depth10, buffer20, "wsnb20_depth10")) %>%
+    full_join(zone_in_shed(depth5, buffer20, "wsnb20_depth5")) %>%
+    full_join(zone_in_shed(depth3, buffer20, "wsnb20_depth3")) %>%
+    full_join(zone_in_shed(depth1, buffer20, "wsnb20_depth1"))
 
-)
 #### Buffer 100 ####
-wsnb100 <- bind_cols(
-    zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10"),
-    zone_in_shed(rast(flowacc5_output), buffer100, "wsnb100_flowacc5"),
-    zone_in_shed(rast(flowacc3_output), buffer100, "wsnb100_flowacc3"),
-    zone_in_shed(rast(flowacc1_output), buffer100, "wsnb100_flowacc1"),
-    zone_in_shed(rast(slope10_output), buffer100, "wsnb100_slope10"),
-    zone_in_shed(rast(slope5_output), buffer100, "wsnb100_slope5"),
-    zone_in_shed(rast(slope3_output), buffer100, "wsnb100_slope3"),
-    zone_in_shed(rast(slope1_output), buffer100, "wsnb100_slope1"),
-    zone_in_shed(rast(tpi10_output), buffer100, "wsnb100_tpi10"),
-    zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5"),
-    zone_in_shed(rast(tpi3_output), buffer100, "wsnb100_tpi3"),
-    zone_in_shed(rast(tpi1_output), buffer100, "wsnb100_tpi1"),
-    zone_in_shed(rast(twi10_output), buffer100, "wsnb100_twi10"),
-    zone_in_shed(rast(twi5_output), buffer100, "wsnb100_twi5"),
-    zone_in_shed(rast(twi3_output), buffer100, "wsnb100_twi3"),
-    zone_in_shed(rast(twi1_output), buffer100, "wsnb100_twi1"),
-    zone_in_shed(curve10_plan, buffer100, "wsnb100_curve10_plan"),
-    zone_in_shed(curve10_prof, buffer100, "wsnb100_curve10_prof"),
-    zone_in_shed(curve5_plan, buffer100, "wsnb100_curve5_plan"),
-    zone_in_shed(curve5_prof, buffer100, "wsnb100_curve5_prof"),
-    zone_in_shed(curve3_plan, buffer100, "wsnb100_curve3_plan"),
-    zone_in_shed(curve3_prof, buffer100, "wsnb100_curve3_prof"),
-    zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"),
-    zone_in_shed(curve1_prof, buffer100, "wsnb100_curve1_prof"),
-    zone_in_shed(depth10, buffer100, "wsnb100_depth10"),
-    zone_in_shed(depth5, buffer100, "wsnb100_depth5"),
-    zone_in_shed(depth3, buffer100, "wsnb100_depth3"),
-    zone_in_shed(depth1, buffer100, "wsnb100_depth1")
+wsnb100 <- 
+  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
+  full_join(zone_in_shed(rast(flowacc5_output), buffer100, "wsnb100_flowacc5")) %>% 
+    full_join(zone_in_shed(rast(flowacc3_output), buffer100, "wsnb100_flowacc3")) %>%
+    full_join(zone_in_shed(rast(flowacc1_output), buffer100, "wsnb100_flowacc1")) %>%
+    full_join(zone_in_shed(rast(slope10_output), buffer100, "wsnb100_slope10")) %>%
+    full_join(zone_in_shed(rast(slope5_output), buffer100, "wsnb100_slope5")) %>%
+    full_join(zone_in_shed(rast(slope3_output), buffer100, "wsnb100_slope3")) %>%
+    full_join(zone_in_shed(rast(slope1_output), buffer100, "wsnb100_slope1")) %>%
+    full_join(zone_in_shed(rast(tpi10_output), buffer100, "wsnb100_tpi10")) %>%
+    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
+    full_join(zone_in_shed(rast(tpi3_output), buffer100, "wsnb100_tpi3")) %>%
+    full_join(zone_in_shed(rast(tpi1_output), buffer100, "wsnb100_tpi1")) %>%
+    full_join(zone_in_shed(rast(twi10_output), buffer100, "wsnb100_twi10")) %>%
+    full_join(zone_in_shed(rast(twi5_output), buffer100, "wsnb100_twi5")) %>%
+    full_join(zone_in_shed(rast(twi3_output), buffer100, "wsnb100_twi3")) %>%
+    full_join(zone_in_shed(rast(twi1_output), buffer100, "wsnb100_twi1")) %>%
+    full_join(zone_in_shed(curve10_plan, buffer100, "wsnb100_curve10_plan")) %>%
+    full_join(zone_in_shed(curve10_prof, buffer100, "wsnb100_curve10_prof")) %>%
+    full_join(zone_in_shed(curve5_plan, buffer100, "wsnb100_curve5_plan")) %>%
+    full_join(zone_in_shed(curve5_prof, buffer100, "wsnb100_curve5_prof")) %>%
+    full_join(zone_in_shed(curve3_plan, buffer100, "wsnb100_curve3_plan")) %>%
+    full_join(zone_in_shed(curve3_prof, buffer100, "wsnb100_curve3_prof")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan")) %>%
+    full_join(zone_in_shed(curve1_prof, buffer100, "wsnb100_curve1_prof")) %>%
+    full_join(zone_in_shed(depth10, buffer100, "wsnb100_depth10")) %>%
+    full_join(zone_in_shed(depth5, buffer100, "wsnb100_depth5")) %>%
+    full_join(zone_in_shed(depth3, buffer100, "wsnb100_depth3")) %>%
+    full_join(zone_in_shed(depth1, buffer100, "wsnb100_depth1")
 
 )
 #### ####
-all_wsnb <- bind_cols(wsnb1, wsnb10, wsnb20, wsnb100)
-all <- bind_cols(all, all_wsnb)
+all_wsnb <- wsnb10 %>% 
+  full_join(wsnb20) %>% 
+  full_join(wsnb100) %>% 
+  select(-ID)
+all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
+  select(-point_valuesID, -point_valueswshed)
+all <- bind_cols(all, all_wsnb) %>% 
+  drop_na()
+#check for NAs
+View(all[!complete.cases(all), ])
+na_counts <- colSums(is.na(all))
+
+names(na_counts[na_counts > 0])
+
 ### Or just include ratio of depths...
 #calculate the ratio of depth nearby to close
 # 1m, 5m, 10m, 100m neighborhoods
@@ -2167,6 +2193,37 @@ all <- bind_cols(all, all_wsnb)
 
 # within drainage areas
 # immediate area
+```
+
+```{r}
+# After calcing all of these numbers, now see if there are any linear trends
+
+
+test2 <- all[,1:2]
+testlm <- lm(point_valuespk ~ point_valuesX10mdem_flowacc, data = test2)
+summary(testlm)
+
+test3 <- all %>% 
+  select(colnames(all[vsurfSpam$varselect.pred]))
+plot(test3)
+  
+significant <- all %>% 
+  pivot_longer(-point_valuespk, values_to = "value", names_to = "names") %>% 
+group_by(names) %>% 
+  do(model = lm(point_valuespk ~ value, data = .)) %>%
+  mutate(p_value = summary(model)$coefficients[2,4],
+         r_sq = summary(model)$r.squared) %>%
+  filter(p_value < 0.05)
+  
+all %>% 
+  pivot_longer(-point_valuespk, values_to = "value", names_to = "names") %>% 
+  filter(names %in% significant$names) %>% 
+group_by(names) %>% 
+  ggplot(aes(x = point_valuespk, y = value, color = names))+
+    geom_point()+
+  geom_smooth(method = 'lm', se = FALSE)+
+    facet_wrap(~names, scale = "free_y")+
+  theme_classic()
 ```
 
 
@@ -2197,18 +2254,20 @@ varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(spamApp) - 1, cex = 0
 Try predicting straight up depth, but also depth classes
 ```{r}
 all_df <- as.data.frame(all)
-RFDef <- randomForest(point_valuespk ~ ., data = all_df)
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
 RFDef
 plot(RFDef)
 
-RFDefImp <- randomForest(point_valuespk ~ ., data = all, importance = TRUE)
+RFDefImp <- randomForest(point_valuespk ~ ., data = all, importance = TRUE, na.action = na.omit)
 varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
-varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = 10, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = TRUE, n.var = 10, cex = 0.8, main = "Variable importance")
 
 #plot of partial dependence
 imp <- importance(RFDefImp)
 impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
 impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
 op <- par(mfrow=c(2, 5))
 for (i in seq_along(impvar1)) {
     partialPlot(RFDefImp, all_df, impvar1[i], xlab=impvar1[i],
@@ -2237,14 +2296,15 @@ colnames(all[vsurfSpamPred$varselect.pred])
 plot(vsurfSpamPred)
 all[vsurfSpamPred$varselect.pred]
 
-varImpPlot(RFDefImp, type = 1, scale = FALSE, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = TRUE, main = "Variable importance")
 partialPlot(vsurfSpamPred, pred.data = as.data.frame(all), x.var = "point_valuespk", main = "point_valuespk")
 
 #no training split
 all_df <- as.data.frame(all)
 
 iris.learn <- sample(1:nrow(all_df), nrow(all_df))
-iris.vsurf <- VSURF(all_df[,-1], all_df[, 1])
+iris.vsurf <- VSURF(x = all_df[,-1], y = all_df[, 1], na.action = na.omit)
+plot(iris.vsurf)
 colnames(all_df[iris.vsurf$varselect.interp])
 colnames(all_df[iris.vsurf$varselect.pred])
 
@@ -2255,15 +2315,127 @@ tibble(iris.predictions, "actual" = all_df[, 1]) %>%
   mutate(diff = actual - iris.predictions) %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
 
+
+
+
 #training split
 iris.learn <- sample(1:nrow(all_df), nrow(all_df)*0.7)
 iris.vsurf <- VSURF(all_df[iris.learn, -1], all_df[iris.learn, 1],
-                            step = "pred")
+                            step = "pred", na.action = na.omit)
 iris.predictions <- predict(iris.vsurf, newdata = all_df[-iris.learn, -1])
 #calculate RMSE
 tibble(iris.predictions, "actual" = all_df[-iris.learn, 1]) %>% 
   summarise(RMSE = sqrt(mean((actual - pred)^2)))
+
+
+# Use selected variables from VSURF to train RF using RF package
+# then plot in partial dependence plot
+colnames(all_df[iris.vsurf$varselect.pred])
+
+all_df <- all %>% 
+  select(point_valuespk, colnames(all_df[iris.vsurf$varselect.pred]))
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = all_df, importance = TRUE, na.action = na.omit)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDefImp)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+#impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
+op <- par(mfrow=c(1, 5))
+for (i in seq_along(impvar)) {
+    partialPlot(RFDefImp, as.data.frame(all_df), impvar[i], xlab=impvar[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1,
+                rug = TRUE,
+                ylim = c(0, 1))
+}
+par(op)
 ```
+
+```{r map-of-RF-error}
+
+rf_error <- tibble(iris.predictions, "actual" = all_df[, 1]) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  rename(pk = actual) %>% 
+  left_join(as_tibble(w3_stic_locs_r))
+
+rf_error_vect <- vect("mod_bed_points.shp") %>% 
+  mutate(ID = FID + 1) %>% 
+  left_join(rf_error, by = "ID")
+
+rf_error %>% 
+  ggplot()+
+  geom_point(aes(x = pk,y = diff))+
+  geom_hline(yintercept = 0, color = "grey")+
+  theme_classic()
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = rf_error_vect, aes(fill = diff), size = 3, pch = 21) +
+  scale_fill_gradient2()+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+```
+
+```{r}
+p_load(plotmo)
+
+all_df <- all %>% 
+  select(point_valuespk, colnames(all_df[iris.vsurf$varselect.pred]))
+
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+plotres(RFDef, which = 3)
+plotres(RFDef, which = 4)
+
+```
+
+```{r}
+# ALE plot
+    p_load(iml)
+    predictor <- Predictor$new(model = rf_model, data = data, y = "your_target_variable")
+
+    # Assuming 'rf_model' is your randomForest model and 'X' is your feature matrix
+    # 'pred.fun' is a function that takes the model and new data and returns predictions
+    pred_fun <- function(model, newdata) {
+      predict(model, newdata)
+    }
+
+    # Plot ALE for a single feature (e.g., the 1st feature)
+    ALEPlot(X = X, X.model = rf_model, pred.fun = pred_fun, J = 1)
+
+    # Plot ALE for an interaction between two features (e.g., 1st and 2nd)
+    ALEPlot(X = X, X.model = rf_model, pred.fun = pred_fun, J = c(1, 2))
+```
+
 
 # DEPREC
 ```{r orginal krig chunk}
