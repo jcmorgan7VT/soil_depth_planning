@@ -1991,6 +1991,177 @@ all <- bind_cols(point_values_comb, wshed_zones) %>%
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
   select(-point_valuesID, -point_valueswshed)
 ### extract by neighbors in watersheds ####
+#creating zone in shed function
+# input_dataset <- depth10
+ buffer_dataset <- buffer10
+# col_name <- "wsnb100_depth10"
+
+## BIG MISMATCH BETWEEN THE ID COLUMN OF WSHED ZONES AND ID OF PK POINTS
+
+#zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
+#for(i in 1:length(buffer_dataset$ID)){
+i <- 30
+  ID <- buffer_dataset$ID[i]
+  zones <- rast(w3_surface_sheds)
+
+  zones[zones != ID] <- NA
+  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
+  input_resamp  <- resample(project(input_dataset, zones_masked), 
+                            zones_masked, method="bilinear")
+  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
+  if(i == 1) alldat <- output
+  if(i > 1) alldat <- rbind(alldat, output)
+}
+  #alldat <- tibble(alldat[,2])
+  colnames(alldat) <- c("ID", col_name)
+  return(alldat)
+}
+zone_in_shed(
+  depth10,
+  buffer10,
+  "wsnb100_depth10"
+)
+# input_dataset <- depth10
+# buffer_dataset <- buffer100
+# col_name <- "wsnb100_depth10"
+buffer1 <- terra::buffer(w3_stic_locs_r, width = 1)
+buffer10 <- terra::buffer(w3_stic_locs_r, width = 10)
+buffer20 <- terra::buffer(w3_stic_locs_r, width = 20)
+buffer100 <- terra::buffer(w3_stic_locs_r, width = 100)
+
+#### Buffer 1 ####
+wsnb1 <- left_join(
+    zone_in_shed(rast(flowacc10_output), buffer1, "wsnb1_flowacc10"),
+    zone_in_shed(rast(flowacc5_output), buffer1, "wsnb1_flowacc5"),
+    zone_in_shed(rast(flowacc3_output), buffer1, "wsnb1_flowacc3"),
+    zone_in_shed(rast(flowacc1_output), buffer1, "wsnb1_flowacc1"),
+    zone_in_shed(rast(slope10_output), buffer1, "wsnb1_slope10"),
+    zone_in_shed(rast(slope5_output), buffer1, "wsnb1_slope5"),
+    zone_in_shed(rast(slope3_output), buffer1, "wsnb1_slope3"),
+    zone_in_shed(rast(slope1_output), buffer1, "wsnb1_slope1"),
+    zone_in_shed(rast(tpi10_output), buffer1, "wsnb1_tpi10"),
+    zone_in_shed(rast(tpi5_output), buffer1, "wsnb1_tpi5"),
+    zone_in_shed(rast(tpi3_output), buffer1, "wsnb1_tpi3"),
+    zone_in_shed(rast(tpi1_output), buffer1, "wsnb1_tpi1"),
+    zone_in_shed(rast(twi10_output), buffer1, "wsnb1_twi10"),
+    zone_in_shed(rast(twi5_output), buffer1, "wsnb1_twi5"),
+    zone_in_shed(rast(twi3_output), buffer1, "wsnb1_twi3"),
+    zone_in_shed(rast(twi1_output), buffer1, "wsnb1_twi1"),
+    zone_in_shed(curve10_plan, buffer1, "wsnb1_curve10_plan"),
+    zone_in_shed(curve10_prof, buffer1, "wsnb1_curve10_prof"),
+    zone_in_shed(curve5_plan, buffer1, "wsnb1_curve5_plan"),
+    zone_in_shed(curve5_prof, buffer1, "wsnb1_curve5_prof"),
+    zone_in_shed(curve3_plan, buffer1, "wsnb1_curve3_plan"),
+    zone_in_shed(curve3_prof, buffer1, "wsnb1_curve3_prof"),
+    zone_in_shed(curve1_plan, buffer1, "wsnb1_curve1_plan"),
+    zone_in_shed(curve1_prof, buffer1, "wsnb1_curve1_prof"),
+    zone_in_shed(depth10, buffer1, "wsnb1_depth10"),
+    zone_in_shed(depth5, buffer1, "wsnb1_depth5"),
+    zone_in_shed(depth3, buffer1, "wsnb1_depth3"),
+    zone_in_shed(depth1, buffer1, "wsnb1_depth1")
+
+)
+#### Buffer 10 ####
+wsnb10 <- bind_cols(
+    zone_in_shed(rast(flowacc10_output), buffer10, "wsnb10_flowacc10"),
+    zone_in_shed(rast(flowacc5_output), buffer10, "wsnb10_flowacc5"),
+    zone_in_shed(rast(flowacc3_output), buffer10, "wsnb10_flowacc3"),
+    zone_in_shed(rast(flowacc1_output), buffer10, "wsnb10_flowacc1"),
+    zone_in_shed(rast(slope10_output), buffer10, "wsnb10_slope10"),
+    zone_in_shed(rast(slope5_output), buffer10, "wsnb10_slope5"),
+    zone_in_shed(rast(slope3_output), buffer10, "wsnb10_slope3"),
+    zone_in_shed(rast(slope1_output), buffer10, "wsnb10_slope1"),
+    zone_in_shed(rast(tpi10_output), buffer10, "wsnb10_tpi10"),
+    zone_in_shed(rast(tpi5_output), buffer10, "wsnb10_tpi5"),
+    zone_in_shed(rast(tpi3_output), buffer10, "wsnb10_tpi3"),
+    zone_in_shed(rast(tpi1_output), buffer10, "wsnb10_tpi1"),
+    zone_in_shed(rast(twi10_output), buffer10, "wsnb10_twi10"),
+    zone_in_shed(rast(twi5_output), buffer10, "wsnb10_twi5"),
+    zone_in_shed(rast(twi3_output), buffer10, "wsnb10_twi3"),
+    zone_in_shed(rast(twi1_output), buffer10, "wsnb10_twi1"),
+    zone_in_shed(curve10_plan, buffer10, "wsnb10_curve10_plan"),
+    zone_in_shed(curve10_prof, buffer10, "wsnb10_curve10_prof"),
+    zone_in_shed(curve5_plan, buffer10, "wsnb10_curve5_plan"),
+    zone_in_shed(curve5_prof, buffer10, "wsnb10_curve5_prof"),
+    zone_in_shed(curve3_plan, buffer10, "wsnb10_curve3_plan"),
+    zone_in_shed(curve3_prof, buffer10, "wsnb10_curve3_prof"),
+    zone_in_shed(curve1_plan, buffer10, "wsnb10_curve1_plan"),
+    zone_in_shed(curve1_prof, buffer10, "wsnb10_curve1_prof"),
+    zone_in_shed(depth10, buffer10, "wsnb10_depth10"),
+    zone_in_shed(depth5, buffer10, "wsnb10_depth5"),
+    zone_in_shed(depth3, buffer10, "wsnb10_depth3"),
+    zone_in_shed(depth1, buffer10, "wsnb10_depth1")
+
+)
+#### Buffer 20 ####
+wsnb20 <- bind_cols(
+    zone_in_shed(rast(flowacc10_output), buffer20, "wsnb20_flowacc10"),
+    zone_in_shed(rast(flowacc5_output), buffer20, "wsnb20_flowacc5"),
+    zone_in_shed(rast(flowacc3_output), buffer20, "wsnb20_flowacc3"),
+    zone_in_shed(rast(flowacc1_output), buffer20, "wsnb20_flowacc1"),
+    zone_in_shed(rast(slope10_output), buffer20, "wsnb20_slope10"),
+    zone_in_shed(rast(slope5_output), buffer20, "wsnb20_slope5"),
+    zone_in_shed(rast(slope3_output), buffer20, "wsnb20_slope3"),
+    zone_in_shed(rast(slope1_output), buffer20, "wsnb20_slope1"),
+    zone_in_shed(rast(tpi10_output), buffer20, "wsnb20_tpi10"),
+    zone_in_shed(rast(tpi5_output), buffer20, "wsnb20_tpi5"),
+    zone_in_shed(rast(tpi3_output), buffer20, "wsnb20_tpi3"),
+    zone_in_shed(rast(tpi1_output), buffer20, "wsnb20_tpi1"),
+    zone_in_shed(rast(twi10_output), buffer20, "wsnb20_twi10"),
+    zone_in_shed(rast(twi5_output), buffer20, "wsnb20_twi5"),
+    zone_in_shed(rast(twi3_output), buffer20, "wsnb20_twi3"),
+    zone_in_shed(rast(twi1_output), buffer20, "wsnb20_twi1"),
+    zone_in_shed(curve10_plan, buffer20, "wsnb20_curve10_plan"),
+    zone_in_shed(curve10_prof, buffer20, "wsnb20_curve10_prof"),
+    zone_in_shed(curve5_plan, buffer20, "wsnb20_curve5_plan"),
+    zone_in_shed(curve5_prof, buffer20, "wsnb20_curve5_prof"),
+    zone_in_shed(curve3_plan, buffer20, "wsnb20_curve3_plan"),
+    zone_in_shed(curve3_prof, buffer20, "wsnb20_curve3_prof"),
+    zone_in_shed(curve1_plan, buffer20, "wsnb20_curve1_plan"),
+    zone_in_shed(curve1_prof, buffer20, "wsnb20_curve1_prof"),
+    zone_in_shed(depth10, buffer20, "wsnb20_depth10"),
+    zone_in_shed(depth5, buffer20, "wsnb20_depth5"),
+    zone_in_shed(depth3, buffer20, "wsnb20_depth3"),
+    zone_in_shed(depth1, buffer20, "wsnb20_depth1")
+
+)
+#### Buffer 100 ####
+wsnb100 <- bind_cols(
+    zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10"),
+    zone_in_shed(rast(flowacc5_output), buffer100, "wsnb100_flowacc5"),
+    zone_in_shed(rast(flowacc3_output), buffer100, "wsnb100_flowacc3"),
+    zone_in_shed(rast(flowacc1_output), buffer100, "wsnb100_flowacc1"),
+    zone_in_shed(rast(slope10_output), buffer100, "wsnb100_slope10"),
+    zone_in_shed(rast(slope5_output), buffer100, "wsnb100_slope5"),
+    zone_in_shed(rast(slope3_output), buffer100, "wsnb100_slope3"),
+    zone_in_shed(rast(slope1_output), buffer100, "wsnb100_slope1"),
+    zone_in_shed(rast(tpi10_output), buffer100, "wsnb100_tpi10"),
+    zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5"),
+    zone_in_shed(rast(tpi3_output), buffer100, "wsnb100_tpi3"),
+    zone_in_shed(rast(tpi1_output), buffer100, "wsnb100_tpi1"),
+    zone_in_shed(rast(twi10_output), buffer100, "wsnb100_twi10"),
+    zone_in_shed(rast(twi5_output), buffer100, "wsnb100_twi5"),
+    zone_in_shed(rast(twi3_output), buffer100, "wsnb100_twi3"),
+    zone_in_shed(rast(twi1_output), buffer100, "wsnb100_twi1"),
+    zone_in_shed(curve10_plan, buffer100, "wsnb100_curve10_plan"),
+    zone_in_shed(curve10_prof, buffer100, "wsnb100_curve10_prof"),
+    zone_in_shed(curve5_plan, buffer100, "wsnb100_curve5_plan"),
+    zone_in_shed(curve5_prof, buffer100, "wsnb100_curve5_prof"),
+    zone_in_shed(curve3_plan, buffer100, "wsnb100_curve3_plan"),
+    zone_in_shed(curve3_prof, buffer100, "wsnb100_curve3_prof"),
+    zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"),
+    zone_in_shed(curve1_prof, buffer100, "wsnb100_curve1_prof"),
+    zone_in_shed(depth10, buffer100, "wsnb100_depth10"),
+    zone_in_shed(depth5, buffer100, "wsnb100_depth5"),
+    zone_in_shed(depth3, buffer100, "wsnb100_depth3"),
+    zone_in_shed(depth1, buffer100, "wsnb100_depth1")
+
+)
+#### ####
+all_wsnb <- bind_cols(wsnb1, wsnb10, wsnb20, wsnb100)
+all <- bind_cols(all, all_wsnb)
+### Or just include ratio of depths...
+#calculate the ratio of depth nearby to close
 # 1m, 5m, 10m, 100m neighborhoods
 # slope, curvature, average depth, total volume, TWI, one drainage area 
 
