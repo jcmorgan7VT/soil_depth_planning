@@ -11,6 +11,7 @@ editor_options:
 Gathering datasets to use to plan where seismic measurements will be made.
 
 ```{r setup-and-formatting-input-data}
+set.seed(8413447)
 library(pacman)
 p_load(tidyverse, sp, mapview, tmap, stars,
        lubridate, gganimate, animation, patchwork, ggrepel, whitebox,
@@ -70,6 +71,7 @@ plot(dem1)
 w3_stream <- vect(paste0(arsenal, "/HB/hbstream/hb42_master_startend.shp"))
 
 w3_stream <- crop(w3_stream, w3_outline) #currently in NAD83
+plot(w3_stream)
 #classified stream map that scott sent me
 
 # Think I will use Carrie's stream network instead of Scott's
@@ -79,6 +81,8 @@ plot(w3_regime) #currently in NAD83
 # STIC sensor locations
 stic_locs_snap_location <- paste0(arsenal, "/w3_stic_locs_snap.shp")
 pks_w3 <- read_csv(paste0(arsenal, "/pks_w3.csv"))
+baseflow_pk <- read_csv(paste0(arsenal, "/baseflow_pk.csv"))
+
 
 w3_stic_locs_r <- vect(stic_locs_snap_location) %>% 
   left_join(pks_w3, by = "ID")
@@ -325,6 +329,46 @@ ggplot()+
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
         axis.line.y = element_blank())
+
+## Plot of just seismic for AGU25 poster
+seis_alone <- seis %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+  rename(depth = mean_depth) %>% 
+  #select(depth) %>% 
+  mutate(source = "seismic")
+
+ggplot()+
+  geom_spatraster(data = rast(hillshade_location))+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  geom_sf(data = w3_outline, color = "#FFD166", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = depth), size = 2, pch = 21) +
+  
+  scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
+                      name = "Depth (m)")+
+  #facet_wrap(~source, ncol= 4)+
+  theme_classic()+
+  #geom_sf(data = w3_pour, colour = "black") +
+   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank())
 ```
 
 # Kriging
@@ -480,6 +524,51 @@ geom_sf(data = errors, aes(fill = error), size = 3, pch = 21) +
                               pad_y = unit(1, "cm"))+
     guides(colour = guide_coloursteps(show.limits = TRUE))
 
+#make a map with baseflow permanence
+w3_stic_locs_baseflow <- w3_stic_locs_r %>% left_join(baseflow_pk, by = "ID")
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = w3_stic_locs_baseflow, aes(fill = baseflow_pk), size = 5, pch = 21) +
+#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+  #add point locations of seismic measurements
+    geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
+#geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+# geom_text(data = seeps, aes(label = ID, geometry = geometry),
+#                      stat = "sf_coordinates",
+#                      nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+  #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
+  #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
+  #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps"
+  )+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+
 ```
 ```{r}
 # try to use mapview and mapedit to manually select stream reaches of interest
@@ -496,14 +585,18 @@ plot(W2, add = TRUE, col = "red")
 
 # testing generating points along lines
 plot(w3_regime)
+plot(points_along_line[10], add = TRUE)
+
 
 # find total length first, then use to generate points along line
 points_along_line <- spsample(as(st_as_sf(W2), "Spatial"), n = 100, type = "regular")
 points(points_along_line)
 
+equally_spaced_points <- st_sample(st_as_sf(W2), size = 100, type = "regular")
+plot(equally_spaced_points, add = TRUE)
 # now all I have to do is extract values from the depth-DEM and I can plot again
 bedrock_topo <- rast(bedrock_topo_location)
-bedrock_surface <- extract(bedrock_topo, vect(points_along_line), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
+bedrock_surface <- terra::extract(bedrock_topo, vect(equally_spaced_points), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
 
 # This doesn't look right, once again failed to do this, will have to do it later in ARC
 ```
@@ -1296,72 +1389,108 @@ plot(rast(w3_sub_shed) - rast(bed_sub_shed))
 Relevant calculations were done in Arc
 ```{r Longitidunal-profiles}
 exaggeration <- 3
-E3_seis <- read_csv("./transect_exports_oct1/E3seis.csv") %>% 
+E3_seis_og <- read_csv("./transect_exports_oct1/E3seis.csv") %>% 
   mutate(elevation = RASTERVALU - depth * exaggeration,
          type = "seis",
          trib = "E3") %>% 
   rename(dist = MEAS) %>% 
-  select(elevation, dist, type, trib)
-E4_seis <- read_csv("./transect_exports_oct1/E4seis.csv") %>% 
+  dplyr::select(elevation, dist, type, trib)
+E4_seis_og <- read_csv("./transect_exports_oct1/E4seis.csv") %>% 
   mutate(elevation = RASTERVALU - depth * exaggeration,
          type = "seis",
          trib = "E4") %>% 
   rename(dist = MEAS)%>% 
-  select(elevation, dist, type, trib)
-W2_seis <- read_csv("./transect_exports_oct1/W2seis.csv") %>% 
+  dplyr::select(elevation, dist, type, trib)
+W2_seis_og <- read_csv("./transect_exports_oct1/W2seis.csv") %>% 
   mutate(elevation = RASTERVALU - depth * exaggeration,
          type = "seis",
          trib = "W2") %>% 
   rename(dist = MEAS)%>% 
-  select(elevation, dist, type, trib)
-W3_seis <- read_csv("./transect_exports_oct1/W3seis.csv") %>% 
+  dplyr::select(elevation, dist, type, trib)
+W3_seis_og <- read_csv("./transect_exports_oct1/W3seis.csv") %>% 
   mutate(elevation = RASTERVALU - depth * exaggeration,
          type = "seis",
          trib = "W3") %>% 
   rename(dist = MEAS)%>% 
-  select(elevation, dist, type, trib)
+  dplyr::select(elevation, dist, type, trib)
 
+og <- bind_rows(E4_seis_og,
+                E3_seis_og,
+                W3_seis_og,
+                W2_seis_og)
 E3_stics <- read_csv("./transect_exports_oct1/E3stics.csv") %>% 
-  select(MEAS, ID, RASTERVALU) %>% 
+  dplyr::select(MEAS, ID, RASTERVALU) %>% 
   rename(dist = MEAS, elevation = RASTERVALU) %>% 
   mutate(type = "stics",
          trib = "E3")
 E4_stics <- read_csv("./transect_exports_oct1/E4stics.csv") %>% 
-  select(MEAS, ID, RASTERVALU) %>% 
+  dplyr::select(MEAS, ID, RASTERVALU) %>% 
   rename(dist = MEAS, elevation = RASTERVALU) %>% 
   mutate(type = "stics",
          trib = "E4")
 W2_stics <- read_csv("./transect_exports_oct1/W2stics.csv") %>% 
-  select(MEAS, ID, RASTERVALU) %>% 
+  dplyr::select(MEAS, ID, RASTERVALU) %>% 
   rename(dist = MEAS, elevation = RASTERVALU) %>% 
   mutate(type = "stics",
          trib = "W2")
 W3_stics <- read_csv("./transect_exports_oct1/W3stics.csv") %>% 
-  select(MEAS, ID, RASTERVALU) %>% 
+  dplyr::select(MEAS, ID, RASTERVALU) %>% 
   rename(dist = MEAS, elevation = RASTERVALU) %>% 
   mutate(type = "stics",
          trib = "W3")
 
-E3_surface <- read_csv("./transect_exports_oct1/E3surface.csv") %>% 
-  select(POINT_M, RASTERVALU) %>% 
-  rename(dist = POINT_M, elevation = RASTERVALU) %>% 
+E3_surface <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/E3_updated.csv") %>% 
+  dplyr::select(POINT_M, surface_el) %>% 
+  rename(dist = POINT_M, elevation = surface_el) %>% 
   mutate(type = "surface",
          trib = "E3")
-E4_surface <- read_csv("./transect_exports_oct1/E4surface.csv") %>% 
-  select(POINT_M, RASTERVALU) %>% 
-  rename(dist = POINT_M, elevation = RASTERVALU) %>% 
+E4_surface <- read_csv("./transect_exports_oct1/updated_depth_profiles/E4_updated.csv") %>% 
+  dplyr::select(POINT_M, surface_el) %>% 
+  rename(dist = POINT_M, elevation = surface_el) %>% 
   mutate(type = "surface",
          trib = "E4")
-W2_surface <- read_csv("./transect_exports_oct1/W2surface.csv") %>% 
-  select(POINT_M, RASTERVALU) %>% 
-  rename(dist = POINT_M, elevation = RASTERVALU) %>% 
+W2_surface <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/W2_updated.csv") %>% 
+  dplyr::select(POINT_M, Surface_elev) %>% 
+  rename(dist = POINT_M, elevation = Surface_elev) %>% 
   mutate(type = "surface",
          trib = "W2")
-W3_surface <- read_csv("./transect_exports_oct1/W3surface.csv") %>% 
-  select(ORIG_LEN, RASTERVALU) %>% 
-  rename(dist = ORIG_LEN, elevation = RASTERVALU) %>% 
+W3_surface <- read_csv("./transect_exports_oct1/updated_depth_profiles/W3_updated.csv") %>% 
+  dplyr::select(POINT_M, surface_el) %>% 
+  rename(dist = POINT_M, elevation = surface_el) %>% 
   mutate(type = "surface",
          trib = "W3")
+
+## alternative seismic
+E3_seis <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/E3_updated.csv") %>% 
+  mutate(elevation = surface_el - RASTERVALU * exaggeration) %>%
+  dplyr::select(POINT_M, elevation) %>% 
+  rename(dist = POINT_M) %>% 
+  mutate(type = "subsurface",
+         trib = "E3")
+E4_seis <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/E4_updated.csv") %>% 
+  mutate(elevation = surface_el - RASTERVALU * exaggeration) %>%
+  dplyr::select(POINT_M, elevation) %>% 
+  rename(dist = POINT_M) %>% 
+  mutate(type = "subsurface",
+         trib = "E4")
+W3_seis <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/W3_updated.csv") %>% 
+  mutate(elevation = surface_el - RASTERVALU * exaggeration) %>%
+  dplyr::select(POINT_M, elevation) %>% 
+  rename(dist = POINT_M) %>% 
+  mutate(type = "subsurface",
+         trib = "W3")
+W2_seis <- 
+  read_csv("./transect_exports_oct1/updated_depth_profiles/W2_updated.csv") %>% 
+  mutate(elevation = Surface_elev - RASTERVALU * exaggeration) %>%
+  dplyr::select(POINT_M, elevation) %>% 
+  rename(dist = POINT_M) %>% 
+  mutate(type = "subsurface",
+         trib = "W2")
 stics <- rbind(E3_stics,
                E4_stics,
                W2_stics,
@@ -1375,6 +1504,7 @@ rbind(E3_seis, E3_surface,
   drop_na() %>% 
   ggplot(aes(x = dist, y = elevation))+
   geom_line(aes(lty = type))+
+  geom_point(data = og)+
   scale_linetype_manual(values = c(2, 1), 
                         name = "")+
   theme_classic()+
@@ -1506,6 +1636,128 @@ Sanity check- take all observations not used in krig- holes not to bedrock- and 
 ```{r}
 
 ```
+
+# figure of individual watersheds
+```{r}
+# crop by watershed of each tributary
+# read in pour points
+read_csv("./transect_exports_oct1/pour_points.csv") %>% 
+  vect(geom = c("x", "y"), crs = crs1) %>% 
+  writeVector("subshed_pour_points.shp", overwrite = TRUE)
+
+
+filled_dem <- paste0(arsenal, "/w3_dems/1mdem_w3_filled.tif")
+wbt_fill_depressions_wang_and_liu(
+  dem = dem1_location,
+  output = filled_dem
+)
+
+flowacc_location <- paste0(arsenal, "/w3_dems/1mdem_w3_flowacc.tif")
+wbt_d_inf_flow_accumulation(input = filled_dem,
+                            output = flowacc_location,
+                            out_type = "Specific Contributing Area")
+
+flowdir_location <- paste0(arsenal, "/w3_dems/1mdem_w3_flowdir.tif")
+wbt_d8_pointer(dem = filled_dem,
+               output = flowdir_location)
+
+surface_streams <- "./export_to_arc/surface_streams.tif"
+wbt_extract_streams(flow_accum = flowacc_location,
+                    output = surface_streams,
+                    threshold = 2000)
+plot(rast(surface_streams), col ="black")
+points(vect("subshed_locs_snap.shp"), col = "red")
+
+points(vect("subshed_pour_points.shp"))
+
+#snap pour point to streams
+subshed_locs_snap <- "subshed_locs_snap.shp"
+wbt_jenson_snap_pour_points(pour_pts = "subshed_pour_points.shp",
+                            streams = surface_streams,
+                            output = subshed_locs_snap,
+                            snap_dist = 10)
+
+plot(rast(paste0(arsenal, "/w3_dems/1mdem_w3_flowacc.tif")))
+d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
+subsheds <- "subsheds.tif"
+wbt_watershed(d8_pntr = flowdir_location,
+              pour_pts = subshed_locs_snap,
+              output = subsheds)
+plot(rast(subsheds), col = my_colors)
+
+# now crop by each of these sheds, and plot each individually
+subby <- rast(subsheds)
+
+subby[subby > 1] <- NA
+subby[subby > 1] <- NA
+
+
+plot(subby)
+
+
+```
+
+## Crop and mask by each subwatershed
+```{r}
+# now crop by each of these sheds, and plot each individually
+subby <- rast(subsheds)
+
+subby[subby != 3] <- NA
+
+plot(subby)
+subby <- mask(subby, subby)
+sub_outline <- as.polygons(subby, extent=FALSE)
+
+# crop and mask hillshade and depth raster
+hill_crop <- hill %>% 
+  crop(sub_outline) %>% 
+  mask(sub_outline)
+plot(hill_crop)
+
+k_terra_crop <- k_terra %>% 
+  crop(sub_outline) %>% 
+  mask(sub_outline)
+
+crop(w3_regime, sub_outline)  %>% plot()
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill_crop)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra_crop, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", 
+                         name = "Depth (m)",option = "magma",
+                         limits = c(0, 8))+
+    geom_sf(data = as.contour(crop(dem1, sub_outline), nlevels = 30), 
+            color = "white", alpha = 0.1)+
+    geom_sf(data = crop(w3_regime, sub_outline), colour = "lightgray") +
+      new_scale_fill()+
+    geom_sf(data = crop(w3_stic_locs_r, sub_outline), 
+                        aes(fill = pk), size = 3, pch = 21) +
+    geom_sf(data = crop(combin_norm, sub_outline), 
+            alpha = 0.5, size = 0.5) +
+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps"
+  )+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+```
+
 
 # RF to try to tell a story
 Create input dataset to RF...
@@ -2003,13 +2255,13 @@ text(buffer10, cex = 0.75)
 
 ## BIG MISMATCH BETWEEN THE ID COLUMN OF WSHED ZONES AND ID OF PK POINTS
 
-#zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
-#for(i in 1:length(buffer_dataset$ID)){
-i <- 29
-input_dataset <- rast(flowacc10_output)
-buffer_dataset <- buffer1
-col_name <- "wsnb100_depth10"
-  ID <- 30
+zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
+for(i in 1:length(buffer_dataset$ID)){
+#i <- 29
+#input_dataset <- rast(flowacc10_output)
+#buffer_dataset <- buffer1
+#col_name <- "wsnb100_depth10"
+  ID <- i
   zones <- rast(w3_surface_sheds)
 
   zones[zones != ID] <- NA
@@ -2175,9 +2427,9 @@ wsnb100 <-
 all_wsnb <- wsnb10 %>% 
   full_join(wsnb20) %>% 
   full_join(wsnb100) %>% 
-  select(-ID)
+  dplyr::select(-ID)
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
-  select(-point_valuesID, -point_valueswshed)
+  dplyr::select(-point_valueswshed)
 all <- bind_cols(all, all_wsnb) %>% 
   drop_na()
 #check for NAs
@@ -2195,7 +2447,14 @@ names(na_counts[na_counts > 0])
 # immediate area
 ```
 
-```{r}
+## Add new datasets
+JP and Kevin think I should also test drainage area weighted by bedrock, and ROE from soil model.
+
+Other things to try: 
+- entire drainage areas
+- forcing the model to work with only TWI and depth, or something like that
+
+```{r checking-for-linear}
 # After calcing all of these numbers, now see if there are any linear trends
 
 
@@ -2226,120 +2485,144 @@ group_by(names) %>%
   theme_classic()
 ```
 
+# New clean run through of whole RF routine
+```{r RF-analysis-template}
 
+#check for NAs
+View(all_df[!complete.cases(all_df), ])
+na_counts <- colSums(is.na(all_df))
 
-RF example from textbook
-```{r}
-p_load(randomForest, kernlab)
-# set up spam data set
-data("spam", package = "kernlab")
-set.seed(9146301) 
-levels(spam$type) <- c("ok", "spam")
-yTable <- table(spam$type)
-indApp <- c(sample(1:yTable[2], yTable[2]/2), sample((yTable[2] + 1):nrow(spam), yTable[1]/2))
-spamApp <- spam[indApp, ]
-spamTest <- spam[-indApp, ]
+names(na_counts[na_counts > 0])
 
-# run RF on spam dataset
-RFDef <- randomForest(type ~ ., data = spamApp)
-RFDef
-plot(RFDef)
+#remove ID column
+all_df <- as.data.frame(all) %>% 
+  dplyr::select(-point_valuesID)
 
-RFDoTrace <- randomForest(type ~ ., data = spamApp, ntree = 50, do.trace = 25)
+# VSURF routine
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
 
-RFDefImp <- randomForest(type ~ ., data = spamApp, importance = TRUE)
-varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(spamApp) - 1, cex = 0.8, main = "Variable importance")
-```
-
-Try predicting straight up depth, but also depth classes
-```{r}
-all_df <- as.data.frame(all)
-RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
-RFDef
-plot(RFDef)
-
-RFDefImp <- randomForest(point_valuespk ~ ., data = all, importance = TRUE, na.action = na.omit)
-varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
-varImpPlot(RFDefImp, type = 1, scale = TRUE, n.var = 10, cex = 0.8, main = "Variable importance")
-
-#plot of partial dependence
-imp <- importance(RFDefImp)
-impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
-impvar1 <- impvar[1:10]
-#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
-
-op <- par(mfrow=c(2, 5))
-for (i in seq_along(impvar1)) {
-    partialPlot(RFDefImp, all_df, impvar1[i], xlab=impvar1[i],
-                #main=paste("Partial Dependence on", impvar1[i]),
-                main = "",
-                cex = 0.1)
-}
-par(op)
-```
-
-```{r figuring-out-VSURF}
-#p_load(VSURF)
-vsurfSpam <- VSURF(point_valuespk ~ ., all, parallel = TRUE, ncores = 3, clusterType = "FORK", ntree = 500)
-vsurfSpam
-summary(vsurfSpam)
-plot(vsurfSpam)
-colnames(all[vsurfSpam$varselect.interp])
-colnames(all[vsurfSpam$varselect.pred])
-
-inputs <- all_df[colnames(all[vsurfSpam$varselect.interp])]
-
-
-
-vsurfSpamPred <- VSURF_pred(point_valuespk ~  ., all, nmj = 15, err.interp = vsurfSpam$err.interp, varselect.interp = vsurfSpam$varselect.interp)
-colnames(all[vsurfSpamPred$varselect.pred])
-plot(vsurfSpamPred)
-all[vsurfSpamPred$varselect.pred]
-
-varImpPlot(RFDefImp, type = 1, scale = TRUE, main = "Variable importance")
-partialPlot(vsurfSpamPred, pred.data = as.data.frame(all), x.var = "point_valuespk", main = "point_valuespk")
-
-#no training split
-all_df <- as.data.frame(all)
-
-iris.learn <- sample(1:nrow(all_df), nrow(all_df))
-iris.vsurf <- VSURF(x = all_df[,-1], y = all_df[, 1], na.action = na.omit)
+iris.vsurf <- VSURF(x = iris.learn$training, 
+                    y = iris.learn$pk, 
+                    na.action = na.omit,
+                    parallel = TRUE, 
+                    ncores = 3, clusterType = "FORK", ntree = 50000)
 plot(iris.vsurf)
-colnames(all_df[iris.vsurf$varselect.interp])
-colnames(all_df[iris.vsurf$varselect.pred])
+colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
 
-iris.predictions <- predict(iris.vsurf, newdata = all_df[, -1], step = "pred")
+iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "pred")
 #calculate RMSE
-tibble(iris.predictions, "actual" = all_df[, 1]) %>% 
+tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
   mutate(diff = actual - iris.predictions) %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
 
+# subset after VSURF selection routine
+chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
+chosen_df <- all %>% 
+  dplyr::select(c(point_valuespk, chosen_vars))
 
-
-#training split
-iris.learn <- sample(1:nrow(all_df), nrow(all_df)*0.7)
-iris.vsurf <- VSURF(all_df[iris.learn, -1], all_df[iris.learn, 1],
-                            step = "pred", na.action = na.omit)
-iris.predictions <- predict(iris.vsurf, newdata = all_df[-iris.learn, -1])
-#calculate RMSE
-tibble(iris.predictions, "actual" = all_df[-iris.learn, 1]) %>% 
-  summarise(RMSE = sqrt(mean((actual - pred)^2)))
-
-
-# Use selected variables from VSURF to train RF using RF package
-# then plot in partial dependence plot
-colnames(all_df[iris.vsurf$varselect.pred])
-
-all_df <- all %>% 
-  select(point_valuespk, colnames(all_df[iris.vsurf$varselect.pred]))
-RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+# Run normal RF and output OOB error, number of variables
+RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit, ntree = 5000, importance = TRUE)
 RFDef
 plot(RFDef)
 
-RFDefImp <- randomForest(point_valuespk ~ ., data = all_df, importance = TRUE, na.action = na.omit)
-varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDef, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDef)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+#impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
+op <- par(mfrow=c(1, length(impvar)))
+for (i in seq_along(impvar)) {
+    partialPlot(RFDef, as.data.frame(all_df), impvar[i], xlab=impvar[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1,
+                rug = TRUE,
+                ylim = c(0, 1))
+}
+par(op)
+
+
+
+
+# Plot residual plots
+plotres(RFDef, which = 3)
+plotres(RFDef, which = 4)
+
+
+#calculate individual ALE
+predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
+effs <- FeatureEffects$new(predictor, grid.size = 10)
+plot(effs)
+
+pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
+
+# calculate 2nd order ALE
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+```
+```{r RF-analysis-baseflow-pk}
+
+baseflow_pk
+
+all_bflow <- all %>% rename(ID = point_valuesID) %>% 
+  inner_join(baseflow_pk) %>% 
+    dplyr::select(-ID, -point_valuespk) %>% 
+  relocate(baseflow_pk)
+
+#check for NAs
+View(all_bflow[!complete.cases(all_bflow), ])
+na_counts <- colSums(is.na(all_bflow))
+names(na_counts[na_counts > 0])
+
+#remove ID column
+all_df <- as.data.frame(all_bflow) #%>% 
+  #dplyr::select(-point_valuesID)
+
+# VSURF routine
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
+
+iris.vsurf <- VSURF(x = iris.learn$training, 
+                    y = iris.learn$pk, 
+                    na.action = na.omit)
+plot(iris.vsurf)
+#colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+
+iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "pred")
+#calculate RMSE
+tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+# subset after VSURF selection routine
+chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+chosen_df <- all %>% 
+  dplyr::select(c(point_valuespk, chosen_vars))
+
+# Run normal RF and output OOB error, number of variables
+RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = chosen_df, importance = TRUE, na.action = na.omit)
+
 varImpPlot(RFDefImp, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
 
 #plot of partial dependence
@@ -2348,7 +2631,7 @@ impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
 #impvar1 <- impvar[1:10]
 #impvar1 <- colnames(all[vsurfSpam$varselect.pred])
 
-op <- par(mfrow=c(1, 5))
+op <- par(mfrow=c(1, length(chosen_vars)))
 for (i in seq_along(impvar)) {
     partialPlot(RFDefImp, as.data.frame(all_df), impvar[i], xlab=impvar[i],
                 #main=paste("Partial Dependence on", impvar1[i]),
@@ -2358,84 +2641,47 @@ for (i in seq_along(impvar)) {
                 ylim = c(0, 1))
 }
 par(op)
-```
 
-```{r map-of-RF-error}
 
-rf_error <- tibble(iris.predictions, "actual" = all_df[, 1]) %>% 
-  mutate(diff = actual - iris.predictions) %>% 
-  rename(pk = actual) %>% 
-  left_join(as_tibble(w3_stic_locs_r))
 
-rf_error_vect <- vect("mod_bed_points.shp") %>% 
-  mutate(ID = FID + 1) %>% 
-  left_join(rf_error, by = "ID")
 
-rf_error %>% 
-  ggplot()+
-  geom_point(aes(x = pk,y = diff))+
-  geom_hline(yintercept = 0, color = "grey")+
-  theme_classic()
-
-ggplot()+
-  theme_void()+
-  geom_spatraster(data = hill)+
-  theme_void()+
-  #theme(legend.position = "")+
-  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-                       na.value = "transparent",
-                       guide = "none")+
-    new_scale_fill() +
-  #theme(legend.position = "")+
-  geom_spatraster(data = k_terra, 
-                  aes(fill = var1.pred_var1.pred),
-                  alpha = 0.7)+
-    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
-  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
-      geom_sf(data = w3_regime, colour = "lightgray") +
-
-  new_scale_fill()+
-geom_sf(data = rf_error_vect, aes(fill = diff), size = 3, pch = 21) +
-  scale_fill_gradient2()+
-  ggspatial::annotation_scale(location = 'tr',
-                              pad_x = unit(0.4, "cm"),
-                              pad_y = unit(1, "cm"))+
-    guides(colour = guide_coloursteps(show.limits = TRUE))
-```
-
-```{r}
-p_load(plotmo)
-
-all_df <- all %>% 
-  select(point_valuespk, colnames(all_df[iris.vsurf$varselect.pred]))
-
-RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
-RFDef
-plot(RFDef)
-
+# Plot residual plots
+# https://dataanalyticsbook.info/chapter-6.-diagnosis-residuals-heterogeneity.html
 plotres(RFDef, which = 3)
 plotres(RFDef, which = 4)
 
+
+#calculate individual ALE
+predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
+effs <- FeatureEffects$new(predictor, grid.size = 10)
+plot(effs)
+
+pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
+
+# calculate 2nd order ALE
+# text book: https://christophm.github.io/interpretable-ml-book/ale.html
+# code : https://github.com/christophM/interpretable-ml-book/blob/master/manuscript/ale.qmd
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[3], chosen_vars[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
 ```
 
-```{r}
-# ALE plot
-    p_load(iml)
-    predictor <- Predictor$new(model = rf_model, data = data, y = "your_target_variable")
-
-    # Assuming 'rf_model' is your randomForest model and 'X' is your feature matrix
-    # 'pred.fun' is a function that takes the model and new data and returns predictions
-    pred_fun <- function(model, newdata) {
-      predict(model, newdata)
-    }
-
-    # Plot ALE for a single feature (e.g., the 1st feature)
-    ALEPlot(X = X, X.model = rf_model, pred.fun = pred_fun, J = 1)
-
-    # Plot ALE for an interaction between two features (e.g., 1st and 2nd)
-    ALEPlot(X = X, X.model = rf_model, pred.fun = pred_fun, J = c(1, 2))
+# prediction of the whole network based on RF
+```{r generate-points-along-network}
+equally_spaced_points <- st_sample(st_as_sf(W2), size = 100, type = "regular")
+plot(equally_spaced_points)
+# now all I have to do is extract values from the depth-DEM and I can plot again
+bedrock_topo <- rast(bedrock_topo_location)
+bedrock_surface <- terra::extract(bedrock_topo, vect(equally_spaced_points), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
 ```
 
+
+# RF based on topography for all 3 watersheds
 
 # DEPREC
 ```{r orginal krig chunk}
@@ -2539,3 +2785,489 @@ plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
 # use variogram model to krig
 k <- krige(depth~1, all_sources, grd, v.m)
 ```
+```{r figuring-out-VSURF}
+#p_load(VSURF)
+vsurfSpam <- VSURF(point_valuespk ~ ., all, parallel = TRUE, ncores = 3, clusterType = "FORK", ntree = 500)
+vsurfSpam
+summary(vsurfSpam)
+plot(vsurfSpam)
+colnames(all[vsurfSpam$varselect.interp])
+colnames(all[vsurfSpam$varselect.pred])
+
+inputs <- all_df[colnames(all[vsurfSpam$varselect.interp])]
+
+
+
+vsurfSpamPred <- VSURF_pred(point_valuespk ~  ., all, nmj = 15, err.interp = vsurfSpam$err.interp, varselect.interp = vsurfSpam$varselect.interp)
+colnames(all[vsurfSpamPred$varselect.pred])
+plot(vsurfSpamPred)
+all[vsurfSpamPred$varselect.pred]
+
+varImpPlot(RFDefImp, type = 1, scale = TRUE, main = "Variable importance")
+partialPlot(vsurfSpamPred, pred.data = as.data.frame(all), x.var = "point_valuespk", main = "point_valuespk")
+
+#no training split
+all_df <- as.data.frame(all)
+
+iris.learn <- sample(1:nrow(all_df), nrow(all_df))
+iris.vsurf <- VSURF(x = all_df[,-1], y = all_df[, 1], na.action = na.omit)
+plot(iris.vsurf)
+colnames(all_df[,-1][iris.vsurf$varselect.interp])
+colnames(all_df[iris.vsurf$varselect.pred])
+
+
+iris.predictions <- predict(iris.vsurf, newdata = all_df[, -1], step = "pred")
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df[, 1]) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+
+
+
+#training split
+iris.learn <- sample(1:nrow(all_df), nrow(all_df)*0.7)
+iris.vsurf <- VSURF(all_df[iris.learn, -1], all_df[iris.learn, 1],
+                            step = "pred", na.action = na.omit)
+iris.predictions <- predict(iris.vsurf, newdata = all_df[-iris.learn, -1])
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df[-iris.learn, 1]) %>% 
+  summarise(RMSE = sqrt(mean((actual - pred)^2)))
+
+
+# Use selected variables from VSURF to train RF using RF package
+# then plot in partial dependence plot
+colnames(all_df[iris.vsurf$varselect.pred])
+
+all_df <- all %>% 
+  select(point_valuespk, colnames(all_df[iris.vsurf$varselect.pred]))
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = all_df, importance = TRUE, na.action = na.omit)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDefImp)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+#impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
+op <- par(mfrow=c(1, 5))
+for (i in seq_along(impvar)) {
+    partialPlot(RFDefImp, as.data.frame(all_df), impvar[i], xlab=impvar[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1,
+                rug = TRUE,
+                ylim = c(0, 1))
+}
+par(op)
+```
+
+
+
+
+
+RF example from textbook
+```{r}
+p_load(randomForest, kernlab)
+# set up spam data set
+data("spam", package = "kernlab")
+set.seed(9146301) 
+levels(spam$type) <- c("ok", "spam")
+yTable <- table(spam$type)
+indApp <- c(sample(1:yTable[2], yTable[2]/2), sample((yTable[2] + 1):nrow(spam), yTable[1]/2))
+spamApp <- spam[indApp, ]
+spamTest <- spam[-indApp, ]
+
+# run RF on spam dataset
+RFDef <- randomForest(type ~ ., data = spamApp)
+RFDef
+plot(RFDef)
+
+RFDoTrace <- randomForest(type ~ ., data = spamApp, ntree = 50, do.trace = 25)
+
+RFDefImp <- randomForest(type ~ ., data = spamApp, importance = TRUE)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(spamApp) - 1, cex = 0.8, main = "Variable importance")
+```
+
+Try predicting straight up depth, but also depth classes
+```{r}
+all_df <- as.data.frame(all)
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = all, importance = TRUE, na.action = na.omit)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = TRUE, n.var = 10, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDefImp)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
+op <- par(mfrow=c(2, 5))
+for (i in seq_along(impvar1)) {
+    partialPlot(RFDefImp, all_df, impvar1[i], xlab=impvar1[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1)
+}
+par(op)
+```
+
+```{r figuring-out-VSURF}
+#p_load(VSURF)
+vsurfSpam <- VSURF(point_valuespk ~ ., all, parallel = TRUE, ncores = 3, clusterType = "FORK", ntree = 500)
+vsurfSpam
+summary(vsurfSpam)
+plot(vsurfSpam)
+colnames(all[vsurfSpam$varselect.interp])
+colnames(all[,-1][vsurfSpam$varselect.pred])
+
+inputs <- all_df[colnames(all[vsurfSpam$varselect.interp])]
+
+
+
+vsurfSpamPred <- VSURF_pred(point_valuespk ~  ., all, nmj = 15, err.interp = vsurfSpam$err.interp, varselect.interp = vsurfSpam$varselect.interp)
+colnames(all[vsurfSpamPred$varselect.pred])
+plot(vsurfSpamPred)
+all[vsurfSpamPred$varselect.pred]
+
+varImpPlot(RFDefImp, type = 1, scale = TRUE, main = "Variable importance")
+partialPlot(vsurfSpamPred, pred.data = as.data.frame(all), x.var = "point_valuespk", main = "point_valuespk")
+
+#no training split
+all_df <- as.data.frame(all) %>% 
+  dplyr::select(-point_valuesID)
+
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
+
+iris.vsurf <- VSURF(x = iris.learn$training, y = iris.learn$pk, na.action = na.omit, ntree = 500, clusterType = "FORK")
+plot(iris.vsurf)
+colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+
+iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "pred")
+#calculate RMSE
+tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+
+
+
+#training split
+iris.learn <- sample(1:nrow(all_df), nrow(all_df)*0.7)
+iris.vsurf <- VSURF(all_df[iris.learn, -1], all_df[iris.learn, 1],
+                            step = "pred", na.action = na.omit)
+iris.predictions <- predict(iris.vsurf, newdata = all_df[-iris.learn, -1])
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df[-iris.learn, 1]) %>% 
+  summarise(RMSE = sqrt(mean((actual - pred)^2)))
+
+
+# Use selected variables from VSURF to train RF using RF package
+# then plot in partial dependence plot
+chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+all_df <- all %>% 
+  dplyr::select(c(point_valuespk, chosen_vars))
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(point_valuespk ~ ., data = all_df, importance = TRUE, na.action = na.omit)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDefImp)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+#impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+
+op <- par(mfrow=c(1, 5))
+for (i in seq_along(impvar)) {
+    partialPlot(RFDefImp, as.data.frame(all_df), impvar[i], xlab=impvar[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1,
+                rug = TRUE,
+                ylim = c(0, 1))
+}
+par(op)
+```
+
+```{r map-of-RF-error}
+
+rf_error <- tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  rename(pk = actual) %>% 
+  left_join(as_tibble(w3_stic_locs_r))
+
+rf_error_vect <- vect("mod_bed_points.shp") %>% 
+  mutate(ID = FID + 1) %>% 
+  left_join(rf_error, by = "ID")
+
+rf_error %>% 
+  ggplot()+
+  geom_point(aes(x = pk,y = diff))+
+  geom_hline(yintercept = 0, color = "grey")+
+  theme_classic()
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = rf_error_vect, aes(fill = diff), size = 3, pch = 21) +
+  scale_fill_gradient2()+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+```
+
+```{r residuals-analysis}
+p_load(plotmo)
+
+all_df <- all %>% 
+  dplyr::select(c(point_valuespk, chosen_vars))
+
+RFDef <- randomForest(point_valuespk ~ ., data = all_df, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+plotres(RFDef, which = 3)
+plotres(RFDef, which = 4)
+
+```
+
+```{r plot-ALE}
+# ALE plot
+    p_load(iml, yaImpute)
+    predictor <- Predictor$new(model = RFDef, data = all_df, y = "point_valuespk")
+
+effs <- FeatureEffects$new(predictor, grid.size = 10)
+plot(effs)
+
+predictors <- colnames(all[iris.vsurf$varselect.pred])
+pred.bike = Predictor$new(RFDef, data = all_df, y = "point_valuespk")
+ale_interact = FeatureEffect$new(pred.bike, 
+                                 feature = c(chosen_vars[1], chosen_vars[2]),
+                                 method = "ale", grid.size = 40)$plot() #+
+  scale_fill_gradient("ALE", low = "red", high = "yellow") + 
+  scale_x_continuous("Relative Humidity") + 
+  scale_y_continuous("Temperature")+
+  #scale_fill_viridis(option = "D") + 
+  theme(legend.position = "top")
+
+  
+  
+# trying to make figure like from textbook of interacting ALE plot
+
+pred.bike = Predictor$new(RFDef, data = all_df, y = "point_valuespk")
+limits = c(-0.25, 0.25)
+
+ale3 = FeatureEffect$new(pred.bike, predictors[1], method = "ale")$plot() +
+  scale_x_continuous("Wind speed") +
+  scale_y_continuous("ALE of bike rentals", limits=limits)
+
+alecat1 = FeatureEffect$new(pred.bike, predictors[2], method = "ale") 
+
+
+ale3 
+
+ale_uaa = FeatureEffect$new(pred.bike, feature = chosen_vars[3], method = "ale")$results
+ale_uaa$feature = "uaa"
+ale_uaa$x = ale_uaa$uaa
+ale_uaa$uaa = NULL
+ale_dep = FeatureEffect$new(pred.bike, feature = predictors[2], method = "ale")$results
+ale_dep$feature = "dep"
+ale_dep$x = ale_dep$dep
+ale_dep$dep= NULL
+
+#ale_interact = 
+par(mfrow=c(5, 5))
+# 1
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+#2
+FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+#3
+FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+#4
+FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+#5
+FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()#+
+FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+
+```
+
+```{r 2d-ALE-grid}
+#plot all in a grid
+# 1
+ab = FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+ac = FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+    #limits = c(-0.25, 0.25))
+ad = FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+    #limits = c(-0.25, 0.25))
+ae = FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+    #limits = c(-0.25, 0.25))
+#2
+ba = FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+bc = FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+bd = FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+be = FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+#3
+ca = FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+cb = FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25)) 
+cd = FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+ce = FeatureEffect$new(pred.bike, feature = c(predictors[3], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+#4
+da = FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+db = FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25)) 
+dc = FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+de = FeatureEffect$new(pred.bike, feature = c(predictors[4], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+#5
+ea = FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[1]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+eb = FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25)) 
+ec = FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))#+
+ed = FeatureEffect$new(pred.bike, feature = c(predictors[5], predictors[4]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(limits = c(-0.25, 0.25))
+
+
+
+(plot_spacer() + ab + ac + ad + ae +
+ ba + plot_spacer() + bc + bd + be +
+ ca + cb + plot_spacer() + cd + ce +
+ da + db + dc + plot_spacer() + de +
+ ea + eb + ec + ed + plot_spacer()) +
+ plot_layout(ncol = 5, nrow = 5)
+
+FeatureEffect$new(pred.bike, feature = c(predictors[1], predictors[5]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+
+FeatureEffect$new(pred.bike, feature = c(predictors[2], predictors[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+```
+
+
+## Run RF again, but to predict baseflow permanence
+```{r}
+baseflow_pk
+
+all_bflow <- all %>% rename(ID = point_valuesID) %>% 
+  inner_join(baseflow_pk) %>% 
+    dplyr::select(-ID, -point_valuespk) %>% 
+  relocate(baseflow_pk)
+
+#check for NAs
+View(all_bflow[!complete.cases(all_bflow), ])
+na_counts <- colSums(is.na(all_bflow))
+
+names(na_counts[na_counts > 0])
+
+#no training split
+all_df_b <- as.data.frame(all_bflow)
+
+iris.learn <- list()
+iris.learn$training <- all_df_b[,-1]
+iris.learn$pk <- all_df_b[,1]
+
+iris.vsurf <- VSURF(x = iris.learn$training, y = iris.learn$pk)
+plot(iris.vsurf)
+colnames(all_df_b[,-1])
+colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+iris.predictions <- predict(iris.vsurf, newdata = all_df_b[, -1], step = "pred")
+#calculate RMSE
+tibble(iris.predictions, "actual" = all_df_b[, 1]) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+RFDef <- randomForest(baseflow_pk ~ ., data = all_df_b, na.action = na.omit)
+RFDef
+plot(RFDef)
+
+RFDefImp <- randomForest(baseflow_pk ~ ., data = all_df_b, importance = TRUE, na.action = na.omit)
+varImpPlot(RFDefImp, type = 1, scale = FALSE, n.var = ncol(all) - 1, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDefImp, type = 1, scale = TRUE, n.var = 10, cex = 0.8, main = "Variable importance")
+
+data("toys")
+```
+
