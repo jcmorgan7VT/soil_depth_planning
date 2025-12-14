@@ -22,8 +22,10 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        plotly,
        mapedit,
        lwgeom, # function to split lines at points
-       VSURF # random forest variable selection methods
-       )
+       VSURF, # random forest variable selection methods
+       randomForest,
+       plotmo,
+       iml, yaImpute)
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
@@ -94,7 +96,7 @@ w3_stic_location <- "w3_stic_locs.shp"
 # Hubbard Brook Experimental Forest: W3 Surface Water Sampling Sites – 2009-2010
 seeps <- vect("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/W3_synoptic_water_sampling_sites.shp") %>% #as_tibble()
   filter(ID %in% c("seep1", "seep2", "seep3", "seep3A"))
-  as_tibble()
+ # as_tibble()
 plot(w3_outline)
 points(seeps)
 
@@ -130,6 +132,11 @@ scott_rocks <- scott_horizons %>%
   mutate(depth = depth/100) %>% 
   vect(., geom = c("easting", "northing"), crs = crs1) %>% 
   crop(., w3_outline)
+
+scott %>% 
+  #select(pedon, easting, northing) %>% 
+  vect(., geom = c("easting", "northing"), crs = crs1) %>% length()
+  crop(., w3_outline) %>% length()
 #classifies depth with a classification column
 #1 < 0.25m, 2 is 0.25 - 0.5 m, 3 is 0.5 - 1, 4 is 1 - 1.5, 5 is > 1.5
 #does not include soil pits from lateral weathering drive, I think
@@ -285,8 +292,8 @@ group_by(lat, long) %>%
   select(depth) %>% 
   mutate(source = "seismic"),
 
-st_as_sf(auger) %>% 
-  mutate(source = "2019_auger"),
+# st_as_sf(auger) %>% 
+#   mutate(source = "2019_auger"),
 
 st_as_sf(wells_vect) %>% 
   mutate(source = "gw_wells"),
@@ -330,6 +337,9 @@ ggplot()+
         axis.ticks.y = element_blank(),
         axis.line.y = element_blank())
 
+```
+```{r AGU-talk-just-seismic}
+
 ## Plot of just seismic for AGU25 poster
 seis_alone <- seis %>% 
 group_by(lat, long) %>%       
@@ -339,22 +349,23 @@ group_by(lat, long) %>%
   st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
   st_transform(crs1) %>% 
   rename(depth = mean_depth) %>% 
-  #select(depth) %>% 
   mutate(source = "seismic")
 
 ggplot()+
-  geom_spatraster(data = rast(hillshade_location))+
   theme_void()+
-  #theme(legend.position = "")+
-  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-                       na.value = "transparent",
-                       guide = "none")+
-    new_scale_fill() +
-  geom_sf(data = w3_outline, color = "#FFD166", fill = NA, alpha = 0.3, lwd = 2)+
+  # geom_spatraster(data = rast(hillshade_location))+
+  # #theme(legend.position = "")+
+  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+  #                      na.value = "transparent",
+  #                      guide = "none")+
+  #   new_scale_fill() +
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
   geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
   geom_sf(data = seis_alone, aes(fill = depth), size = 2, pch = 21) +
   
-  scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
+  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
+  #                     name = "Depth (m)")+
+  scale_fill_continuous(high = "purple4", low = "white",
                       name = "Depth (m)")+
   #facet_wrap(~source, ncol= 4)+
   theme_classic()+
@@ -368,7 +379,9 @@ ggplot()+
         axis.title.y = element_blank(),
         axis.text.y = element_blank(),
         axis.ticks.y = element_blank(),
-        axis.line.y = element_blank())
+        axis.line.y = element_blank(),
+        legend.position = "left")
+ggsave("w3_map_dpeth.png" )
 ```
 
 # Kriging
@@ -377,7 +390,7 @@ Krig again, but per Yang's suggestion exclude a validation dataset and use it to
 # Krig with validation split
 # input params
 spatial_resolution <- 1 # meters
-split <- 0.8 # 80/20 for example
+split <- 0.7 # 80/20 for example
 number_of_classes <- 5 # number of classes for stratified random sampling
 set.seed(1)
 
@@ -570,6 +583,59 @@ geom_sf(data = w3_stic_locs_baseflow, aes(fill = baseflow_pk), size = 5, pch = 2
     guides(colour = guide_coloursteps(show.limits = TRUE))
 
 ```
+```{r AGU-version}
+# one color plot, using magma color scheme
+
+just_seis <- combin_norm %>% 
+  filter(source != "2019_auger")
+
+W3_IDs <- read_csv(paste0(arsenal, "/W3_IDs.csv"))
+W3_IDs <- W3_IDs$W3_IDs
+
+w3_final_stics <- w3_stic_locs_r %>% 
+  filter(ID %in% W3_IDs)
+
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+  new_scale_fill() +
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+  scale_fill_viridis_c(na.value = "transparent", 
+                       name = "Depth (m)",
+                       option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), 
+          color = "white", alpha = 0.1)+
+  geom_sf(data = w3_stream, 
+          colour = "lightgray") +
+  new_scale_fill()+
+  geom_sf(data = w3_final_stics, 
+          aes(fill = pk), 
+          size = 3, 
+          pch = 21) +
+  geom_sf(data = just_seis, 
+          alpha = 0.5, 
+          size = 0.5) +
+  binned_scale(name = "Flow Persistence",
+               aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps")+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+  guides(colour = guide_coloursteps(show.limits = TRUE))
+```
+
 ```{r}
 # try to use mapview and mapedit to manually select stream reaches of interest
 
@@ -1762,7 +1828,7 @@ ggplot()+
 # RF to try to tell a story
 Create input dataset to RF...
 Different neighborhoods and different spatial scales of topography and depth, to try and predict flow permanence and baseflow flow permanence
-```{r}
+```{r prepare-RF-inputs}
 # come up with a set of functions to extract relevant topography and subsurface neighborhoods
 # dem_locations
 plot(rast(dem1_location))
@@ -2537,15 +2603,21 @@ imp <- importance(RFDef)
 impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
 #impvar1 <- impvar[1:10]
 #impvar1 <- colnames(all[vsurfSpam$varselect.pred])
-
+axes_labels <- c("5 m slope",
+                 "10 m neighborhood flow acc.",
+                 "10 m slope",
+                 "100 m WS neighborhood plan curvature",
+                 "3 m slope")
+impvar <- impvar[1:4]
 op <- par(mfrow=c(1, length(impvar)))
 for (i in seq_along(impvar)) {
-    partialPlot(RFDef, as.data.frame(all_df), impvar[i], xlab=impvar[i],
+    partialPlot(RFDef, as.data.frame(all_df), impvar[i],
                 #main=paste("Partial Dependence on", impvar1[i]),
                 main = "",
                 cex = 0.1,
                 rug = TRUE,
-                ylim = c(0, 1))
+                ylim = c(0.45, 0.65),
+                xlab = axes_labels[i])
 }
 par(op)
 
@@ -2560,13 +2632,14 @@ plotres(RFDef, which = 4)
 #calculate individual ALE
 predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
 effs <- FeatureEffects$new(predictor, grid.size = 10)
-plot(effs)
+plot(effs) + theme_classic()
 
 pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
 
 # calculate 2nd order ALE
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
-  scale_fill_viridis_c()+
+  scale_fill_viridis_c(name = str_wrap("2nd order Accumulated Local Effects", 15))+
+  theme_classic()
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
   scale_fill_viridis_c()+ 
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
