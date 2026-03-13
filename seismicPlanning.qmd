@@ -8,7 +8,14 @@ editor_options:
 
 # Setup
 
-Gathering datasets to use to plan where seismic measurements will be made.
+Conducting Krig on all depth measurements from W3
+6 sources of depth:
+- my seismic measurements
+- 2019 depth surveys that hit rock
+- wells that hit rock
+- soil pits that hit rock
+- my observations of bedrock outcrops
+- 1994 geologic map outcrops
 
 ```{r setup-and-formatting-input-data}
 set.seed(8413447)
@@ -25,7 +32,9 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        VSURF, # random forest variable selection methods
        randomForest,
        plotmo,
-       iml, yaImpute)
+       iml, yaImpute,
+       MASS # for monte carlo simulations
+       )
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
 #gathering datasets
@@ -36,7 +45,7 @@ arsenal <- "/Users/johnmorgan/Documents/VT Research/HBTopmodel"
 #watershed boundary
 w3_shed_location <- paste0(arsenal, "/w3_dems/w3_shed.tif")
 w3_outline <- as.polygons(rast(w3_shed_location), extent=FALSE)
-plot(w3_outline)
+#plot(w3_outline)
 
 #topography- 1m bare earth DEM of the whole valley
 ## starting here so that when I use fill command later, it will yield depressional storage
@@ -65,20 +74,20 @@ writeRaster(dem5, dem5_location, overwrite = TRUE)
 writeRaster(dem10, dem10_location, overwrite = TRUE)
 
 
-plot(dem10)
-plot(dem1)
+#plot(dem10)
+#plot(dem1)
 
 #accurate flowlines of network
 #using Carrie's flowlines
 w3_stream <- vect(paste0(arsenal, "/HB/hbstream/hb42_master_startend.shp"))
 
 w3_stream <- crop(w3_stream, w3_outline) #currently in NAD83
-plot(w3_stream)
+#plot(w3_stream)
 #classified stream map that scott sent me
 
 # Think I will use Carrie's stream network instead of Scott's
 w3_regime <- vect("~/Documents/VT Research/HB_data/headwater_streams_byflowregime/WS3_Streams_Types.shp")
-plot(w3_regime) #currently in NAD83
+#plot(w3_regime) #currently in NAD83
 
 # STIC sensor locations
 stic_locs_snap_location <- paste0(arsenal, "/w3_stic_locs_snap.shp")
@@ -97,8 +106,8 @@ w3_stic_location <- "w3_stic_locs.shp"
 seeps <- vect("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/W3_synoptic_water_sampling_sites.shp") %>% #as_tibble()
   filter(ID %in% c("seep1", "seep2", "seep3", "seep3A"))
  # as_tibble()
-plot(w3_outline)
-points(seeps)
+#plot(w3_outline)
+#points(seeps)
 
 # 2015 sampling sites
 seeps15 <- read_csv("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic_water_sampling_sites/synoptic_surface_water_chemistry_survey2015.csv") %>% 
@@ -108,6 +117,7 @@ seeps15 <- read_csv("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic
 
 
 # Read in data sources ####
+## Soil Map ##
 #most recent soil map
 #https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
 soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
@@ -120,7 +130,7 @@ plot(mask_soil) #currently in NAD83
 scott <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/42d7e94aea392080e7c40877c9a5df83")
 scott_vect <- vect(scott, geom = c("easting", "northing"), crs = crs1)
 scott_vect <- crop(scott_vect, w3_outline)
-plot(scott_vect)
+#plot(scott_vect)
 
 scott_horizons <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/210/2/407e3b6b8b88aaf095f15efeb865efd6")
 
@@ -162,7 +172,7 @@ lat_hit_rock <-
   mutate(depth = depth/100)
 
 
-plot(lat_hit_rock)
+#plot(lat_hit_rock)
 #GPR results
 
 ## GW wells ####
@@ -185,7 +195,7 @@ wells_vect <- wells %>%
   vect(., geom = c("Longitude", "Latitude"), crs = "epsg:4326") %>% 
   terra::project(., crs(w3_outline)) 
 # turns out there are only 4 deep wells with the depth associated...
-plot(wells_vect)
+#plot(wells_vect)
 #also have water depths: https://portal.edirepository.org/nis/dataviewer?packageid=knb-lter-hbr.161.4&entityid=32a138fa201cbe3b7d6766cadb266cba
 
 ## 1994 rocks ####
@@ -211,11 +221,17 @@ seis <- read_csv("HB_HVSR_10_13_25.csv") %>%
   filter(depth != "#DIV/0") %>% 
   mutate(depth = as.numeric(depth)) #%>% 
   
+seis_f0 <- 
+  read_csv("HB_HVSR_10_13_25.csv") %>% 
+  dplyr::select(grilla_number, lat, long, h_v_max, sd) %>% 
+  drop_na()
+  
+
 seis$depth <- as.numeric(seis$depth)
 
 seis_vect <- vect(seis, geom=c("long", "lat"), crs="epsg:4326", keepgeom=FALSE) %>% 
   terra::project(crs(w3_outline))
-plot(seis_vect)
+#plot(seis_vect)
 
 ## 2019 REU auger investigation #########
 # unclear what the best way to filter it will be...
@@ -245,37 +261,8 @@ auger <- read_csv("auger_depths.csv") %>%
     vect(., geom = c("x", "y"), crs = crs1)
 
 ```
-```{r unused-datasets}
-#soil depth from valley wide veg plots, from battles and fahey
-#https://www.proquest.com/docview/304689277?pq-origsite=gscholar&fromopenview=true&sourcetype=Dissertations%20&%20Theses
-# measured soil depth by inserting a steel probe until obstruction was encountered
-# DOES NOT HAVE MEASUREMENTS IN W3
-# fahey <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/121/5/d2a6900ad5470d00dce0d7fa0bca3eec") %>% vect(., geom = c("UTM_EASTING", "UTM_NORTHING"), crs = crs1)
-# plot(fahey)
-# plot(w3_outline, add = TRUE)
-# plot(crop(fahey, w3_outline))
 
 
-# Lat weathing rock https://drive.google.com/drive/folders/12HvDyet8GgEi490Ms0cnigfCRlMjnurT
-#delineated rocky areas for Scott's 2019 paper
-lat_rock <- vect("./ws3bedrock_latweathering/ws3bdrclip.shp")
-plot(w3_outline)
-plot(lat_rock, add = TRUE)
-
-#Ksat measurements in W3
-# Has depth associated with it but I am not sure that it is actually helpful
-# ksat <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/364/1/1716abc55e229147fe45d60cbe7a4b65")
-
-```
-
-
-6 sources of depth:
-- my seismic measurements
-- 2019 depth surveys that hit rock
-- wells that hit rock
-- soil pits that hit rock
-- my observations of bedrock outcrops
-- 1994 geologic map outcrops
 ```{r combine-inputs}
 # chunk to create depth shapefile, of points with appropriate information
 # start with just my seismic measurements
@@ -384,6 +371,50 @@ ggplot()+
         legend.position = "left")
 ggsave("w3_map_dpeth.png" )
 ```
+Make a new map that also shows uncertainty in the peak resonance frequency
+```{r}
+
+## Plot of just seismic for AGU25 poster
+seis_alone <- seis_f0 %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(h_v_mean = mean(h_v_max), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1)
+
+ggplot()+
+  theme_void()+
+  # geom_spatraster(data = rast(hillshade_location))+
+  # #theme(legend.position = "")+
+  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+  #                      na.value = "transparent",
+  #                      guide = "none")+
+  #   new_scale_fill() +
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = h_v_mean), size = 2, pch = 21) +
+  
+  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
+  #                     name = "Depth (m)")+
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "F0 (m/s)")+
+  #facet_wrap(~source, ncol= 4)+
+  theme_classic()+
+  #geom_sf(data = w3_pour, colour = "black") +
+   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+ggsave("w3_map_dpeth.png" )
+```
 
 Analysis before the Krig
 Use the closest depth measurement to each STIC sensor, and plot
@@ -454,6 +485,7 @@ ggsave("depth.png")
 
 lm(depth ~ pk, data = all_out) %>% summary()
 ```
+
 
 # Kriging
 Krig again, but per Yang's suggestion exclude a validation dataset and use it to calculate RMSE
@@ -1790,6 +1822,59 @@ plot1 <- fungal %>%
 plot1
 ```
 
+
+```{r soil pit calibration sites}
+all_cali <- read_csv("all_cali.csv")
+model <- lm(log(all_cali$'max depth')~log(all_cali$h_v_max))
+
+summary(model)
+
+plot(all_cali$'max depth', all_cali$h_v_max)
+#plot showing all calibration sites
+all_cali %>% 
+  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
+  rename(depth = 'max depth') %>% 
+  na.omit() %>% 
+  filter(depth != 12) %>% 
+  filter(type == "soil pit") %>% 
+ggplot()+
+  geom_point(aes(x = h_v_max, y =  depth, color = type))+
+  theme_classic()+
+  labs(title = "Soil calibration sites",
+       x = "Peak Resonance Frequency (Hz)",
+       y = "Depth to bedrock (m)")
+  # scale_x_continuous(trans='log2')+
+  # scale_y_continuous(trans='log2')
+
+#calculate what the shear wave velocity should be
+cali$Vs <- cali$freq * 4 * cali$depth
+summary(cali$Vs)
+mean_Vs <- unname(summary(cali$Vs)[4])
+
+
+lm_eqn <- function(m){
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}
+
+#plot showing only well calibration sites
+all_cali %>% 
+ggplot(aes(x = log(h_v_max), y = log('max depth')))+
+  geom_point()#+
+  #geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
+  geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
+              linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Just well calibration sites",
+       x = "Ln of Peak Resonance Frequency (Hz)",
+       y = "Ln Depth to bedrock (m)") + 
+  geom_text(x = 3.5, y = 2.4, label = lm_eqn(model), parse = TRUE, size = 4)
+```
+
 ```{r calibration-curve}
 # 7/18/24
 # redoing calibration curve
@@ -1799,10 +1884,27 @@ all_cali <- read_csv("all_cali.csv")
 plot(cali$freq, cali$depth)
 model <- lm(log(cali$depth)~log(cali$freq))
 
-
+summary(model)
 #calculate what the shear wave velocity should be
 cali$Vs <- cali$freq * 4 * cali$depth
 summary(cali$Vs)
+mean_Vs <- unname(summary(cali$Vs)[4])
+
+cali %>% 
+  mutate(calc_depth = mean_Vs / (4* freq),
+         diff = abs(depth - calc_depth)) %>%
+summary()
+
+#mean error = -0.36
+# mean abs error is 1.2
+lm_eqn <- function(m){
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}
+p1 <- p + geom_text(x = 3, y = 2.5, label = lm_eqn(df), parse = TRUE)
 
 #plot showing only well calibration sites
 cali %>% 
@@ -1817,11 +1919,15 @@ ggplot(aes(x = log(avg), y = log(depth)))+
   theme_classic()+
   labs(title = "Just well calibration sites",
        x = "Ln of Peak Resonance Frequency (Hz)",
-       y = "Ln Depth to bedrock (m)")
+       y = "Ln Depth to bedrock (m)") + 
+  geom_text(x = 3.5, y = 2.4, label = lm_eqn(model), parse = TRUE, size = 4)
 
 #well calibration not in log scale
-model_lm <- lm((cali$depth)~(cali$freq))
-
+cali <- cali %>% 
+  filter(well != "52_4_D1",
+         well != "52_4_D2")
+model_lm <- lm((cali$depth)~(cali$freq), data = cali)
+summary(model_lm)
 cali %>% 
   reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
   unique() %>% 
@@ -1838,7 +1944,7 @@ ggplot(aes(x = (avg), y = (depth)))+
 
 #plot showing all calibration sites
 all_cali %>% 
-  select(h_v_max, 'max depth', type, quality) %>% 
+  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
   rename(depth = 'max depth') %>% 
   na.omit() %>% 
   filter(depth != 12) %>% 
@@ -1853,7 +1959,7 @@ ggplot()+
 
 #plot showing only the highest quality measurements
   all_cali %>% 
-  select(h_v_max, 'max depth', type, quality) %>% 
+  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
   rename(depth = 'max depth') %>% 
   na.omit() %>% 
   filter(depth != 12) %>% 
@@ -1867,7 +1973,7 @@ ggplot(aes(x = h_v_max, y =  depth))+
        y = "Depth to bedrock (m)")
   
 good <-   all_cali %>% 
-  select(h_v_max, 'max depth', type, quality, Vs_min, Vs_max) %>% 
+  dplyr::select(h_v_max, 'max depth', type, quality, Vs_min, Vs_max) %>% 
   rename(depth = 'max depth') %>% 
   na.omit() %>% 
   filter(depth != 12) %>% 
@@ -1876,9 +1982,432 @@ good <-   all_cali %>%
 mean(good$Vs_min)
 ```
 Sanity check- take all observations not used in krig- holes not to bedrock- and see if they could be dug with this depth raster!
-```{r}
+```{r log model}
+## Calibration in Log scale
+### Fit log log model
+model_lm <- lm(log(depth)~log(freq), data = cali)
+summary(model_lm)
+### Plot of log log model fit
+cali %>% 
+  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
+  unique() %>% 
+ggplot(aes(x = log(avg), y = log(depth)))+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
+  # geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
+  #             linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Just well calibration sites",
+       x = "Ln of Peak Resonance Frequency (Hz)",
+       y = "Ln Depth to bedrock (m)")
+
+
+
+modeled_depth <- seis_f0 %>% 
+  rename(freq = "h_v_max") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(fit_min = fit - se.fit,
+         fit_max = fit + se.fit) %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(fit_min),
+         depth_max = exp(fit_max),
+         se = exp(se.fit)) %>% 
+  bind_cols(seis_f0)
+
+## Use predict on min, max f0
+seis_f0_prepped <- seis_f0 %>% 
+  filter(grilla_number != 114) %>% 
+  mutate(f0_max = h_v_max + sd,
+         f0_min = h_v_max - sd)
+# f0 smaller = deeper depth
+seis_f0_prepped %>% 
+  rename(freq = "f0_min") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         dpeth_min = exp(fit - se.fit),
+         depth_max = exp(fit + se.fit))
+# f0 bigger = shallower depth
+seis_f0_prepped %>% 
+  rename(freq = "f0_max") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         dpeth_min = exp(fit) - exp(se.fit),
+         depth_max = exp(fit) + exp(se.fit)) #%>% 
+  select(depth_max)
 
 ```
+Plot new depth and error from regression; just error from regression
+```{r}
+
+
+## Plot of just seismic for AGU25 poster
+seis_alone <- modeled_depth %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(depth_mean_plotting = mean(depth),
+            se_mean_plotting = mean(se),
+            n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1)
+
+modeled_depth %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(depth_mean_plotting = mean(depth),
+            se_mean_plotting = mean(se),
+            n_coords = n()) %>% 
+  summary()
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = depth_mean_plotting), size = 2, pch = 21) +
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "Estimated Depth (m)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = se_mean_plotting), size = 2, pch = 21) +
+  scale_fill_continuous(high = "darkred", low = "white",
+                      name = "SE of regression (m)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+```
+
+Incorporating error from measurements and regression
+```{r incorporating both sources of error}
+
+## Confidence Interval
+pred <- predict(fit, newdata, interval = "confidence") %>% 
+  as.data.frame() %>% 
+  tibble()
+# 95% chance that depth is between upper and lower values
+pred %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(lwr),
+         depth_max = exp(upr))
+
+## Prediction Interval
+# prediction interval much wider than confidence interval
+pred <- predict(fit, newdata, interval = "prediction") %>% 
+  as.data.frame() %>% 
+  tibble()
+# 95% chance that depth is between upper and lower values
+pred %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(lwr),
+         depth_max = exp(upr))
+
+
+## Use predict on min, max f0
+seis_f0_prepped <- seis_f0 %>% 
+  filter(grilla_number != 114) %>% 
+  mutate(f0_max = h_v_max + sd,
+         f0_min = h_v_max - sd)
+# f0 smaller = deeper depth
+max_prediction <- 
+  seis_f0_prepped %>% 
+  rename(freq = "f0_min") %>% 
+predict(model_lm, ., interval = "prediction") %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(lwr),
+         depth_max = exp(upr)) %>% 
+  dplyr::select(depth_max)
+# f0 bigger = shallower depth
+min_prediction <- 
+  seis_f0_prepped %>% 
+  rename(freq = "f0_max") %>% 
+predict(model_lm, ., interval = "prediction") %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(lwr),
+         depth_max = exp(upr)) %>% 
+  dplyr::select(depth, depth_min)
+  
+# combine all into a final range of values including both sources of error
+all_errors <- seis_f0_prepped %>% 
+  bind_cols(min_prediction, max_prediction) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1)
+```
+```{r}
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = all_errors, aes(fill = depth), size = 2, pch = 21) +
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "Estimated Depth (m)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = all_errors, aes(fill = depth_max), size = 2, pch = 21) +
+  scale_fill_continuous(high = "darkred", low = "white",
+                      name = "Max depth (m)",
+                      limits = c(0, 25))+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = all_errors, aes(fill = depth_min), size = 2, pch = 21) +
+  scale_fill_continuous(high = "darkblue", low = "white",
+                      name = "Min depth (m)"
+                      #,limits = c(0, 25)
+                      )+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+```
+
+
+
+GPT error propagation method
+```{r}
+# train power law model
+train <- cali
+fit <- lm(log(depth) ~ log(freq), data = train)
+
+beta_hat <- coef(fit)        # coefficients
+V_beta   <- vcov(fit)        # covariance matrix
+sigma_res <- sigma(fit)      # residual SD
+
+
+newdata <- seis_f0 %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+newdata$freq
+newdata$freq_sd
+
+nsim <- 5000   # usually 2000–10000 is good
+
+beta_sim <- mvrnorm(nsim, beta_hat, V_beta)
+
+simulate_depth <- function(freq, freq_sd) {
+
+  # 1. simulate true frequencies
+  freq_sim <- rnorm(nsim, mean = freq, sd = freq_sd)
+
+  # avoid impossible values
+  freq_sim[freq_sim <= 0] <- NA
+
+  log_freq_sim <- log(freq_sim)
+
+  # 2. regression prediction
+  log_depth_sim <-
+    beta_sim[,1] +
+    beta_sim[,2] * log_freq_sim
+
+  # 3. add residual variability (optional but recommended)
+  log_depth_sim <-
+    log_depth_sim + rnorm(nsim, 0, sigma_res)
+
+  # 4. convert back to depth
+  depth_sim <- exp(log_depth_sim)
+
+  depth_sim
+}
+
+results <- lapply(
+  seq_len(nrow(newdata)),
+  function(i)
+    simulate_depth(
+      newdata$freq[i],
+      newdata$freq_sd[i]
+    )
+)
+
+newdata$depth_mean <- sapply(results, mean, na.rm=TRUE)
+newdata$depth_sd   <- sapply(results, sd, na.rm=TRUE)
+newdata$depth_cv <- newdata$depth_sd / newdata$depth_mean
+
+newdata$depth_p05  <- sapply(results, quantile, 0.05, na.rm=TRUE)
+newdata$depth_p50  <- sapply(results, quantile, 0.50, na.rm=TRUE) # same thing as median
+newdata$depth_p95  <- sapply(results, quantile, 0.95, na.rm=TRUE)
+summary(newdata)
+hist(results[[5]], breaks = 50,
+     main = "Depth uncertainty distribution",
+     xlab = "Depth")
+
+
+no_crazys <- newdata %>% 
+  filter(depth_sd <= 5)
+hist(no_crazys$depth_p50)
+summary(no_crazys)
+newdata %>% 
+  filter(depth_sd >= 5)
+
+```
+Maps of depth, standard deviation, and relative uncertainty
+```{r}
+no_crazys_plotting <- no_crazys %>% 
+  dplyr::select(lat, long, depth_mean, depth_sd, depth_cv) %>% 
+  pivot_longer(-c(lat, long)) %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1)
+
+carlo_depth <- ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = 
+            dplyr::filter(no_crazys_plotting,
+                          name == "depth_mean"), aes(fill = value), size = 2, pch = 21) +
+  #scale_fill_viridis_c() +
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "Depth (m)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+carlo_sd <- ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = 
+            dplyr::filter(no_crazys_plotting,
+                          name == "depth_sd"), aes(fill = value), size = 2, pch = 21) +
+  #scale_fill_viridis_c() +
+  scale_fill_continuous(high = "darkred", low = "white",
+                      name = "SD of Depth Estimate (m)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+carlo_depth + carlo_sd
+```
+
+Monte Carlo of krig
+```{r}
+depth_sim <- do.call(cbind, results)
+
+all_rows <- newdata %>% 
+  dplyr::select(lat, long, depth_mean, depth_sd, depth_cv) %>% 
+  pivot_longer(-c(lat, long)) %>% 
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+  drop_na()
+
+pts <- all_rows %>%
+  dplyr::filter(name == "depth_mean") %>%
+  dplyr::select(geometry)
+
+
+
+pts$depth <- depth_sim[1,]  # use one realization
+pts <- drop_na(pts)
+vg <- variogram(depth ~ 1, pts)
+
+vg_model <- fit.variogram(
+  vg,
+  vgm(psill = 1, model = "Exp", range = 200, nugget = 0.1)
+)
+
+grid <- st_make_grid(pts, cellsize = 20) |> st_as_sf()
+
+
+nsim <- nrow(depth_sim)
+
+kriged <- vector("list", nsim)
+
+for(i in 1:nsim){
+
+  pts$depth <- depth_sim[i,]
+  pts <- drop_na(pts)
+
+  kr <- krige(
+    depth ~ 1,
+    pts,
+    grid,
+    model = vg_model
+  )
+
+  kriged[[i]] <- kr$var1.pred
+}
+```
+
 
 # figure of individual watersheds
 ```{r}
@@ -2184,6 +2713,7 @@ point_values <-
   extract(depth5, ., ID = FALSE, bind = TRUE) %>%
   extract(depth3, ., ID = FALSE, bind = TRUE) %>%
   extract(depth1, ., ID = FALSE, bind = TRUE) %>%
+  extract(mask_uaab, ., ID = FALSE, bind = TRUE) %>%
   as_tibble()
 point_values_comb <- point_values %>%
   rename_with(~ paste0("point_values", .x))
@@ -2235,7 +2765,12 @@ rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
 rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "total_depth3m" = "var1.pred_var1.pred"),
 rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred")
+                "total_depth1m" = "var1.pred_var1.pred"),
+#add two new variables
+zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
+zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
+
          ) %>% 
   as_tibble()
 
@@ -2280,7 +2815,11 @@ rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
 rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "total_depth3m" = "var1.pred_var1.pred"),
 rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred")
+                "total_depth1m" = "var1.pred_var1.pred"),
+#add two new variables
+zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
+zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
 
@@ -2325,7 +2864,11 @@ rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
 rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "total_depth3m" = "var1.pred_var1.pred"),
 rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred")
+                "total_depth1m" = "var1.pred_var1.pred"),
+#add two new variables
+zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
+zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
 
@@ -2370,7 +2913,11 @@ rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
 rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "total_depth3m" = "var1.pred_var1.pred"),
 rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred")
+                "total_depth1m" = "var1.pred_var1.pred"),
+#add two new variables
+zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
+zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
 buffed_1m_comb <- buffed_1m %>%
@@ -2477,6 +3024,16 @@ wshed_zones <- tibble(
                 zones, fun = "sum", na.rm = TRUE)[,2],
   totaldepth1m_wshed = zonal(resample(project(depth1
                                  , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2],
+  #add two new variables
+  meanuaab_wshed = zonal(resample(project(mask_uaab
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "mean", na.rm = TRUE)[,2],
+  totaluaab_wshed = zonal(resample(project(mask_uaab
+                                 , zones), zones, method="bilinear"), 
+                zones, fun = "sum", na.rm = TRUE)[,2],
+  totalROE_wshed = zonal(resample(project(mask_soil_uniform
+                                 , zones), zones, method="bilinear"), 
                 zones, fun = "sum", na.rm = TRUE)[,2]
   
 )
@@ -2568,7 +3125,10 @@ wsnb1 <-
     full_join(zone_in_shed(depth10, buffer1, "wsnb1_depth10")) %>%
     full_join(zone_in_shed(depth5, buffer1, "wsnb1_depth5")) %>%
     full_join(zone_in_shed(depth3, buffer1, "wsnb1_depth3")) %>%
-    full_join(zone_in_shed(depth1, buffer1, "wsnb1_depth1")
+    full_join(zone_in_shed(depth1, buffer1, "wsnb1_depth1")) #%>% 
+  #add two new variables
+    # full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
+    # full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE")
 
 )
 Sys.time()
@@ -2601,7 +3161,10 @@ wsnb10 <-
     full_join(zone_in_shed(depth10, buffer10, "wsnb10_depth10")) %>%
     full_join(zone_in_shed(depth5, buffer10, "wsnb10_depth5")) %>%
     full_join(zone_in_shed(depth3, buffer10, "wsnb10_depth3")) %>%
-    full_join(zone_in_shed(depth1, buffer10, "wsnb10_depth1")
+    full_join(zone_in_shed(depth1, buffer10, "wsnb10_depth1")) %>% 
+  #add two new variables
+    full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
+    full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE")
 
 )
 #### Buffer 20 ####
@@ -2632,7 +3195,10 @@ wsnb20 <- zone_in_shed(rast(flowacc10_output), buffer20, "wsnb20_flowacc10") %>%
     full_join(zone_in_shed(depth10, buffer20, "wsnb20_depth10")) %>%
     full_join(zone_in_shed(depth5, buffer20, "wsnb20_depth5")) %>%
     full_join(zone_in_shed(depth3, buffer20, "wsnb20_depth3")) %>%
-    full_join(zone_in_shed(depth1, buffer20, "wsnb20_depth1"))
+    full_join(zone_in_shed(depth1, buffer20, "wsnb20_depth1")) %>% 
+  #add two new variables
+    full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
+    full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE"))
 
 #### Buffer 100 ####
 wsnb100 <- 
@@ -2663,18 +3229,25 @@ wsnb100 <-
     full_join(zone_in_shed(depth10, buffer100, "wsnb100_depth10")) %>%
     full_join(zone_in_shed(depth5, buffer100, "wsnb100_depth5")) %>%
     full_join(zone_in_shed(depth3, buffer100, "wsnb100_depth3")) %>%
-    full_join(zone_in_shed(depth1, buffer100, "wsnb100_depth1")
+    full_join(zone_in_shed(depth1, buffer100, "wsnb100_depth1")) %>% 
+  #add two new variables
+    full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
+    full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE")
 
 )
 #### ####
 all_wsnb <- wsnb10 %>% 
   full_join(wsnb20) %>% 
   full_join(wsnb100) %>% 
-  dplyr::select(-ID)
+  dplyr::select(-ID) %>% 
+  dplyr::select(-wsnb1_ROE) %>% 
+  dplyr::select(-wsnb1_uaab)
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
-  dplyr::select(-point_valueswshed)
+  dplyr::select(-point_valueswshed) 
+
 all <- bind_cols(all, all_wsnb) %>% 
-  drop_na()
+  select(where(~!any(is.na(.))))
+  #drop_na()
 #check for NAs
 View(all[!complete.cases(all), ])
 na_counts <- colSums(is.na(all))
@@ -2922,7 +3495,84 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[3], chosen_vars[4]), method
   scale_fill_viridis_c()
 ```
 
+# Add two additional variables, then run random Forest again
+```{r ROE from soil model}
+#num key
+soil_key <- read_csv("HPU_num_key.csv")
+
+#https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
+soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
+crop_soil <- crop(soil, w3_outline)
+mask_soil <- mask(crop_soil, w3_outline)
+plot(mask_soil) #currently in NAD83
+
+# remove all values that are not ROE
+# 2 = Bhs, 4 = E, 7 = 0
+mask_soil[mask_soil == 1] <- NA
+mask_soil[mask_soil == 3] <- NA
+mask_soil[mask_soil == 8] <- NA
+mask_soil[mask_soil == 5] <- NA
+plot(mask_soil)
+
+# use raster algebra to set all values equal to 1, use in RF as sum
+mask_soil_uniform <- (mask_soil * 0) + 1
+plot(mask_soil_uniform)
+```
+```{r Bedrock weighted area}
+#raster of BOSS output, downloaded from google drive of lat weathering project
+library(qgisprocess)
+library(RSAGA)
+options(qgisprocess.path = "/Applications/QGIS.app/Contents/MacOS/qgis_process")
+qgis_configure()
+
+
+# install.packages("RSAGA", dependencies = TRUE)
+# install.packages("qgisprocess")
+library(qgisprocess)
+plot(rast("bdr100k.tif"))
+
+out_dir <- "./bedrock/"
+
+dem <- rast(fill5_output)
+weights <- rast("bdr100k.tif")
+
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                   FLOW_UNIT = 0,
+                   ELEVATION = dem,
+                   METHOD = 3,
+                   NO_NEGATIVES = 1,
+                   ACCU_TARGET = dem,
+                   FLOW = paste0(out_dir, "catcharea")
+)
+
+catcharea <- rast(paste0(out_dir, "catcharea.sdat"))
+crs(catcharea) <- epsg_orig
+writeRaster(catcharea, paste0(out_dir, "catcharea.tif"), overwrite = TRUE)
+
+#weighted
+#qgis_show_help("saga:catchmentarearecursive")
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                   ELEVATION = dem,
+                   FLOW_UNIT = 0,
+                   METHOD = 3,
+                   WEIGHTS = weights,
+                   NO_NEGATIVES = 1,
+                   ACCU_TARGET = dem,
+                   FLOW = paste0(out_dir, "catcharea_br")
+)
+
+plot(rast("uaab_norm2_SHRINKED.tif"))
+uaab <- (rast("uaab_norm2_SHRINKED.tif"))
+
+crop_uaab <- crop(uaab, w3_outline)
+mask_uaab <- mask(crop_uaab, w3_outline)
+plot(mask_uaab)
+```
+
+
+
 # prediction of the whole network based on RF
+Predicting other watersheds and the whole of W3 will be a back up if topmodel doesn't end up working as we intend
 ## Test on one tributary- W2
 ```{r generate-points-along-network}
 equally_spaced_points <- st_sample(st_as_sf(W2), size = 100, type = "regular")
@@ -3359,11 +4009,39 @@ buffed_10m_comb <- buffed_10m %>%
   rename_with(~ paste0("nb10m_", .x))
 
 ### extract by watersheds ####
+# snap points to stream network used to delineate subsheds
+# crop by watershed of each tributary
+# read in pour points
+fill1_output
+
+flowacc1_output
+
+flowdir_location <- paste0(arsenal, "/fb_dems/1mdem_fb_flowdir.tif")
+wbt_d8_pointer(dem = fill1_output,
+               output = flowdir_location)
+
+surface_streams <- paste0(arsenal, "/fb_dems/surface_streams_1m.tif")
+wbt_extract_streams(flow_accum = flowacc1_output,
+                    output = surface_streams,
+                    threshold = 2000)
+plot(rast(surface_streams), col ="black", add = TRUE)
+points(input_points, col = "red")
+
+#snap pour point to streams
+subshed_locs_snap <- "subshed_locs_snap_fb.shp"
+wbt_jenson_snap_pour_points(pour_pts = "input_pts.shp",
+                            streams = surface_streams,
+                            output = subshed_locs_snap,
+                            snap_dist = 30)
+
+points(vect(subshed_locs_snap), col= "red")
+
+# delineate sheds, for zonal stats
 d8 <- paste0(arsenal, "/fb_dems/1mdem_fb_d8pt.tif")
 plot(rast(d8))
 subsheds <- "subsheds2.tif"
 wbt_watershed(d8_pntr = d8,
-              pour_pts = "input_pts.shp",
+              pour_pts = subshed_locs_snap,
               output = subsheds)
 plot(rast(subsheds), col = my_colors)
 zones <- rast(subsheds)
@@ -3414,15 +4092,17 @@ wsnb100 <-
 #### Combine all ####
 
 # A PROBLEM TO FIGURE OUT LATER <- ONE OF THESE IS NOT YIELDING THE SAME NUMBER OF ROWS AS THE OTHERS
-all <-
+all <- 
   bind_cols(
     buffed_10m_comb,
-    wsnb100 %>% tibble() #%>% dplyr::select(-ID),
-    point_values_comb %>% dplyr::select(point_valuesX10mdem_slope,
+    point_values_comb %>% dplyr::select(point_valuesID,
+                                        point_valuesX10mdem_slope,
                                         point_valuesX5mdem_slope,
                                         point_valuesX3mdem_slope)
-  )
-
+  ) %>% 
+  rename(ID = point_valuesID) %>% 
+  right_join(wsnb100, by = "ID") %>% 
+  dplyr::select(-ID)
 
 #check for NAs
 View(all[!complete.cases(all), ])
