@@ -137,7 +137,7 @@ scott_horizons <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-
 scott_rocks <- scott_horizons %>% 
   filter(horizon == "R") %>% 
   left_join(scott, by = "pedon") %>% 
-  select(top_cm, easting, northing) %>% 
+  dplyr::select(top_cm, easting, northing) %>% 
   rename(depth = top_cm) %>% 
   mutate(depth = depth/100) %>% 
   vect(., geom = c("easting", "northing"), crs = crs1) %>% 
@@ -160,14 +160,14 @@ lat_locs <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/36
 #unsure if filtering just by base == R is enough, or if I should also filter to horizon == R
 lat_depth <- read_csv("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/361/3/cca9cc4a0a7218d0602aede8f3f8697e") 
 just_depths <- lat_depth %>% 
-  select(pedon, base_cm) %>% 
+  dplyr::select(pedon, base_cm) %>% 
   group_by(pedon) %>% 
   summarize(depth = max(base_cm))
 
 lat_hit_rock <- 
   lat_locs %>% 
   left_join(just_depths, by = "pedon") %>% 
-  select(easting, northing, depth) %>% 
+  dplyr::select(easting, northing, depth) %>% 
   vect(., geom = c("easting", "northing"), crs = crs1) %>% 
   mutate(depth = depth/100)
 
@@ -185,12 +185,12 @@ wells <- wells %>% mutate(Well_ID = toupper(Well_ID))
 wells_depth <- read_csv("gw_wells_depth_to_rock.csv") %>% 
   rename(depth = "Depth to rock (m)",
          Well_ID = Name) %>% 
-  select(Well_ID, depth) %>% 
+  dplyr::select(Well_ID, depth) %>% 
   filter(depth != "-") %>% 
   mutate(depth = as.numeric(depth))
 wells_vect <- wells %>% 
   left_join(wells_depth, by = "Well_ID") %>% 
-  select(Latitude, Longitude, depth) %>%
+  dplyr::select(Latitude, Longitude, depth) %>%
   drop_na() %>% 
   vect(., geom = c("Longitude", "Latitude"), crs = "epsg:4326") %>% 
   terra::project(., crs(w3_outline)) 
@@ -207,7 +207,7 @@ rocks_1994 <- vect('~/Documents/VT Research/HBTopModel/HB/hbef_outcrops') %>%
 
 ## My rocks ####
 john_rocks <- read_csv("JM_bedrock_outcrops.csv") %>% 
-  select(lat, long) %>% 
+  dplyr::select(lat, long) %>% 
   mutate(depth = as.numeric(0),
          source = "john_outcrops") %>% 
   vect(., geom = c("long", "lat"), crs = "epsg:4326") %>% 
@@ -223,8 +223,8 @@ seis <- read_csv("HB_HVSR_10_13_25.csv") %>%
   
 seis_f0 <- 
   read_csv("HB_HVSR_10_13_25.csv") %>% 
-  dplyr::select(grilla_number, lat, long, h_v_max, sd) %>% 
-  drop_na()
+  dplyr::select(grilla_number, lat, long, h_v_max, sd) #%>% 
+  #drop_na()
   
 
 seis$depth <- as.numeric(seis$depth)
@@ -242,7 +242,7 @@ read_csv("auger_depths.csv") %>%
   left_join(read_csv("auger_locations_topo.csv"), by = c("Sub", "Site")) %>% 
   filter(interface == "R",
          Horizon == "R") %>% 
-  select(Sub, Site, 'Top (cm)', x, y)
+  dplyr::select(Sub, Site, 'Top (cm)', x, y)
 
 #filter 2019 auger investigation to just bedrock depths
 auger <- read_csv("auger_depths.csv") %>% 
@@ -252,17 +252,15 @@ auger <- read_csv("auger_depths.csv") %>%
          top_cm = "Top (cm)") %>% 
   left_join(read_csv("auger_locations_topo.csv"), by = c("Sub", "Site")) %>% 
   filter(interface == "R") %>% 
-  select(Sub, Site, top_cm, x, y) %>%
+  dplyr::select(Sub, Site, top_cm, x, y) %>%
   group_by(Site, x, y, Sub) %>% 
   summarise(depth = max(top_cm)/100) %>% 
   ungroup() %>% 
-  select(x, y, depth) %>% 
+  dplyr::select(x, y, depth) %>% 
   mutate(source = "2019_auger") %>% 
     vect(., geom = c("x", "y"), crs = crs1)
 
 ```
-
-
 ```{r combine-inputs}
 # chunk to create depth shapefile, of points with appropriate information
 # start with just my seismic measurements
@@ -277,7 +275,7 @@ group_by(lat, long) %>%
   st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
   st_transform(crs1) %>% 
   rename(depth = mean_depth) %>% 
-  select(depth) %>% 
+  dplyr::select(depth) %>% 
   mutate(source = "seismic"),
 
 # st_as_sf(auger) %>% 
@@ -295,9 +293,10 @@ st_as_sf(scott_rocks) %>%
 st_as_sf(rocks_1994) %>% 
   mutate(source = "rocks_1994",
          depth = as.numeric(0)) %>% 
-  select(depth, geometry, source),
+  dplyr::select(depth, geometry, source),
 
 st_as_sf(john_rocks))
+
 
 
 # input to kriging needs to be an sf object
@@ -371,12 +370,238 @@ ggplot()+
         legend.position = "left")
 ggsave("w3_map_dpeth.png" )
 ```
+
+
+# Calibration Curve
+Not really useful- soil pit calibration sites
+```{r soil pit calibration sites}
+all_cali <- read_csv("all_cali.csv")
+model <- lm(log(all_cali$'max depth')~log(all_cali$h_v_max))
+
+summary(model)
+
+plot(all_cali$'max depth', all_cali$h_v_max)
+#plot showing all calibration sites
+all_cali %>% 
+  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
+  rename(depth = 'max depth') %>% 
+  na.omit() %>% 
+  filter(depth != 12) %>% 
+  filter(type == "soil pit") %>% 
+ggplot()+
+  geom_point(aes(x = h_v_max, y =  depth, color = type))+
+  theme_classic()+
+  labs(title = "Soil calibration sites",
+       x = "Peak Resonance Frequency (Hz)",
+       y = "Depth to bedrock (m)")
+  # scale_x_continuous(trans='log2')+
+  # scale_y_continuous(trans='log2')
+
+#calculate what the shear wave velocity should be
+cali$Vs <- cali$freq * 4 * cali$depth
+summary(cali$Vs)
+mean_Vs <- unname(summary(cali$Vs)[4])
+
+
+lm_eqn <- function(m){
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 2),
+              b = format(unname(coef(m)[2]), digits = 2),
+             r2 = format(summary(m)$r.squared, digits = 3)))
+    as.character(as.expression(eq));
+}
+
+#plot showing only well calibration sites
+all_cali %>% 
+ggplot(aes(x = log(h_v_max), y = log('max depth')))+
+  geom_point()#+
+  #geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
+  geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
+              linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Just well calibration sites",
+       x = "Ln of Peak Resonance Frequency (Hz)",
+       y = "Ln Depth to bedrock (m)") + 
+  geom_text(x = 3.5, y = 2.4, label = lm_eqn(model), parse = TRUE, size = 4)
+```
+
+Clean calibration curve run-through
+```{r calc-regression}
+# In google sheets, double checked borehole measurements, consolidated and simplified spreadsheet
+# read in, combine distributions, fit to borehole depth, weight by standard deviation
+minimal <- read_csv("well_calibration_minimal.csv") # called well calibration minimal, sheet in just calibration file on google drive
+
+combined_distributions <- minimal %>% 
+  group_by(boreholeID) %>% 
+  reframe(f0 = mean(h_v_max),
+            sd = sqrt(sum(sd^2)/n()^2),
+          depth = borehole_depth_m) %>% 
+  mutate(weights = max(sd) - sd) %>% 
+  arrange(depth) %>% 
+  unique() #%>% 
+  filter(boreholeID != "52_4_D2")
+
+just_D2 <- minimal %>% 
+  group_by(boreholeID) %>% 
+  reframe(f0 = mean(h_v_max),
+            sd = sqrt(sum(sd^2)/n()^2),
+          depth = borehole_depth_m) %>% 
+  mutate(weights = max(sd) - sd) %>% 
+  arrange(depth) %>% 
+  unique() %>% 
+  filter(boreholeID == "52_4_D2")
+
+dummy <- 
+  data.frame(
+  x = seq(1, 
+          100, length.out = 100)
+) 
+
+
+model <- lm(log(depth) ~ log(f0), data = combined_distributions)
+summary(model)
+
+dummy_test <- dummy %>% 
+  tibble() %>% 
+  rename(f0 = x)
+
+dummy_conf <- predict(model, newdata = dummy_test, interval = "confidence", level = 0.95) %>% 
+  exp() %>% 
+  bind_cols(dummy_test)
+# function to produce coeffs for displaying in plot
+fit_loglog <- function(data, x, y) {
+  m <- lm(log(y) ~ log(x), data = data)
+
+  a <- coef(m)[1]
+  b <- coef(m)[2]
+
+  list(
+    model = m,
+    A = exp(a),
+    b = b,
+    A_title = round(exp(a), 3),
+    b_title = round(b, 3)
+  )
+}
+
+out <- fit_loglog(combined_distributions, 
+                  combined_distributions$f0, 
+                  combined_distributions$depth)
+
+# add standard error
+dummy_conf %>% 
+  ggplot(aes(x = f0)) +
+  geom_line(aes(y = fit), linewidth = 0.5, linetype = 2) +
+  geom_ribbon(aes(ymin = lwr, ymax = upr), alpha = 0.3)+
+  geom_point(data = combined_distributions,
+             aes(x = f0, y = depth))+
+    geom_errorbar(data = combined_distributions,
+                  aes(x = f0, y = depth,
+                      xmin=(f0-sd), xmax=(f0+sd)), alpha = 0.8)+
+    geom_text_repel(data = combined_distributions,
+                    aes(x = f0, y = depth,
+                        label = boreholeID),
+                    size = 2.5)+
+  # geom_point(data = just_D2,
+  #            aes(x = f0, y = depth),
+  #            color = "darkgrey")+
+  # geom_text_repel(data = just_D2,
+  #                   aes(x = f0, y = depth,
+  #                       label = boreholeID),
+  #                 color = "darkgrey",
+  #                 size = 2.5)+
+  scale_x_log10(
+    limits = c(9, 60), breaks = c(10, 50, 100)
+    ) +
+  scale_y_log10(
+    limits = c(1, 50), breaks = c(1, 5, 10)
+    ) +
+  labs(
+    title = expression("F"[0]*" to depth power law"),
+    subtitle = (paste("h = ", out$A_title, "f0","^", out$b_title, ", r2 = 0.70")),
+    x = expression("f"[0]),
+    y = "depth"
+  ) +
+  annotation_logticks()+
+  theme_classic()
+```
+
+
+Sanity check- take all observations not used in krig- holes not to bedrock- and see if they could be dug with this depth raster!
+```{r log model}
+## Calibration in Log scale
+### Fit log log model
+model_lm <- lm(log(depth)~log(freq), data = cali)
+summary(model_lm)
+### Plot of log log model fit
+cali %>% 
+  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
+  unique() %>% 
+ggplot(aes(x = log(avg), y = log(depth)))+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
+  # geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
+  #             linetype="dashed")+
+  geom_text_repel(aes(label = well))+
+  theme_classic()+
+  labs(title = "Just well calibration sites",
+       x = "Ln of Peak Resonance Frequency (Hz)",
+       y = "Ln Depth to bedrock (m)")
+
+
+
+modeled_depth <- seis_f0 %>% 
+  rename(freq = "h_v_max") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(fit_min = fit - se.fit,
+         fit_max = fit + se.fit) %>% 
+  mutate(depth = exp(fit),
+         depth_min = exp(fit_min),
+         depth_max = exp(fit_max),
+         se = exp(se.fit)) %>% 
+  bind_cols(seis_f0)
+
+## Use predict on min, max f0
+seis_f0_prepped <- seis_f0 %>% 
+  filter(grilla_number != 114) %>% 
+  mutate(f0_max = h_v_max + sd,
+         f0_min = h_v_max - sd)
+# f0 smaller = deeper depth
+seis_f0_prepped %>% 
+  rename(freq = "f0_min") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         dpeth_min = exp(fit - se.fit),
+         depth_max = exp(fit + se.fit))
+# f0 bigger = shallower depth
+seis_f0_prepped %>% 
+  rename(freq = "f0_max") %>% 
+predict(model_lm, ., se.fit = TRUE) %>% 
+  as.data.frame() %>% 
+  tibble() %>% 
+  mutate(depth = exp(fit),
+         dpeth_min = exp(fit) - exp(se.fit),
+         depth_max = exp(fit) + exp(se.fit)) #%>% 
+  select(depth_max)
+
+```
+
 Make a new map that also shows uncertainty in the peak resonance frequency
 ```{r}
 
 ## Plot of just seismic for AGU25 poster
-seis_alone <- seis_f0 %>% 
-group_by(lat, long) %>%       
+seis_alone <- 
+  seis_f0 %>% 
+  filter(grilla_number == 20) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) 
+  #group_by(lat, long) %>%       
   #remove duplicate locations by taking the mean
   summarise(h_v_mean = mean(h_v_max), n_coords = n()) %>% # n() is for looking duplicate number
   arrange(desc(n_coords)) %>%
@@ -385,24 +610,40 @@ group_by(lat, long) %>%
 
 ggplot()+
   theme_void()+
-  # geom_spatraster(data = rast(hillshade_location))+
-  # #theme(legend.position = "")+
-  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-  #                      na.value = "transparent",
-  #                      guide = "none")+
-  #   new_scale_fill() +
   geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
   geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = seis_alone, aes(fill = h_v_mean), size = 2, pch = 21) +
-  
-  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
-  #                     name = "Depth (m)")+
+  geom_sf(data = seis_alone, aes(fill = h_v_max), size = 2, pch = 21) +
   scale_fill_continuous(high = "purple4", low = "white",
                       name = "F0 (m/s)")+
-  #facet_wrap(~source, ncol= 4)+
   theme_classic()+
-  #geom_sf(data = w3_pour, colour = "black") +
-   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+#seis_alone_sd <- 
+  seis_f0 %>% 
+  filter(sd < 2 * h_v_max) #%>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(sd_mean = mean(sd), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) 
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone_sd, aes(fill = sd_mean), size = 2, pch = 21) +
+  scale_fill_continuous(high = "red4", low = "white",
+                      name = "sd")+
+  theme_classic()+
   theme(rect = element_rect(fill = "transparent", color = NA),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
@@ -426,16 +667,15 @@ W3_IDs <- W3_IDs$W3_IDs
 w3_final_stics <- w3_stic_locs_r %>% 
   filter(ID %in% W3_IDs)
 
-just_seis <- combin_norm %>% 
-  filter(source == "seismic")
-
-just_seis <-
-  seis %>% 
-  filter(sd <= 1) %>% 
+just_seis <- 
+  no_crazys %>% 
+  dplyr::select(lat, long, depth_mean, depth_sd) %>% 
+  # filter(sd <= 1) %>% 
+  # pivot_longer(-c(lat, long)) %>% 
   group_by(lat, long) %>%       
   #remove duplicate locations by taking the mean
-  reframe(mean_depth = mean(depth),
-            mean_sd = mean(sd)) %>% # n() is for looking duplicate number
+  reframe(mean_depth = mean(depth_mean),
+            mean_sd = mean(depth_sd)) %>% # n() is for looking duplicate number
     st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
   st_transform(crs1) %>% 
     dplyr::rename(depth = mean_depth,
@@ -477,6 +717,82 @@ all_out <- filter(all_out, sd <= 2)
 ggplot(all_out, aes(x = depth, y = pk))+
   geom_errorbar(aes(xmin=depth-sd, xmax=depth+sd), width=.05, color = "grey") +
   geom_point()+
+ #geom_smooth(method = 'lm')+
+  theme_classic()+
+  labs(x = "Below-stream depth (m)",
+       y = "Flow persistence")
+ggsave("depth.png")
+
+lm(depth ~ pk, data = all_out) %>% summary()
+```
+
+```{r cluster test}
+# k means clustering
+clusters <- no_crazys %>% 
+  dplyr::select(depth_mean, depth_sd) %>% 
+  kmeans(., 3, nstart = 25)
+
+no_crazys$class <- clusters$cluster
+
+```
+
+```{r permanence versus cluster}
+# STIC locations
+
+clust_seis <- 
+  no_crazys %>% 
+  dplyr::select(lat, long, depth_mean, depth_sd, class) %>% 
+  # filter(sd <= 1) %>% 
+  # pivot_longer(-c(lat, long)) %>% 
+  group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  reframe(mean_depth = mean(depth_mean),
+            mean_sd = mean(depth_sd),
+          cluster = class) %>% # n() is for looking duplicate number
+    st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+    dplyr::rename(depth = mean_depth,
+                  sd = mean_sd) %>% 
+  vect()
+  
+just_seis <- clust_seis
+dist_table <- tibble(distance(just_seis, w3_final_stics))
+
+#which(m == min(m), arr.ind = TRUE)
+colnames(dist_table) <- W3_IDs
+
+dist_table <- (distance(w3_final_stics[2],just_seis))
+which(dist_table == min(dist_table), arr.ind = TRUE)[,2]
+plot(w3_final_stics)
+plot(w3_final_stics[2], add = TRUE, col = "red")
+
+plot(just_seis[69,], add = TRUE, col = "blue")
+
+#write a for loop, there might be a better way but this is what I've got
+for(i in 1:length(W3_IDs)){
+  stic <- w3_final_stics[i]
+  dist_table <- (distance(stic, just_seis))
+  index <- unname(which(dist_table == min(dist_table), arr.ind = TRUE)[,2])
+  
+  depth <- just_seis[index,]$depth
+  sd <- just_seis[index,]$sd
+  pk <- stic$pk
+  ID <- stic$ID
+  cluster <- just_seis[index,]$cluster
+  output <- tibble(ID = ID,
+                   pk = pk,
+                   depth = depth,
+                   sd = sd,
+                   dist = min(dist_table),
+                   class = cluster)
+  if(i == 1) all_out <- output
+  if(i > 1) all_out <- rbind(all_out, output)
+}
+all_out <- filter(all_out, sd <= 2)
+ggplot(all_out, aes(x = depth, y = pk))+
+  geom_errorbar(aes(xmin=depth-sd, xmax=depth+sd), width=.05, color = "grey") +
+  geom_point()+
+  facet_wrap(~class)+
  #geom_smooth(method = 'lm')+
   theme_classic()+
   labs(x = "Below-stream depth (m)",
@@ -1822,228 +2138,6 @@ plot1 <- fungal %>%
 plot1
 ```
 
-
-```{r soil pit calibration sites}
-all_cali <- read_csv("all_cali.csv")
-model <- lm(log(all_cali$'max depth')~log(all_cali$h_v_max))
-
-summary(model)
-
-plot(all_cali$'max depth', all_cali$h_v_max)
-#plot showing all calibration sites
-all_cali %>% 
-  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
-  rename(depth = 'max depth') %>% 
-  na.omit() %>% 
-  filter(depth != 12) %>% 
-  filter(type == "soil pit") %>% 
-ggplot()+
-  geom_point(aes(x = h_v_max, y =  depth, color = type))+
-  theme_classic()+
-  labs(title = "Soil calibration sites",
-       x = "Peak Resonance Frequency (Hz)",
-       y = "Depth to bedrock (m)")
-  # scale_x_continuous(trans='log2')+
-  # scale_y_continuous(trans='log2')
-
-#calculate what the shear wave velocity should be
-cali$Vs <- cali$freq * 4 * cali$depth
-summary(cali$Vs)
-mean_Vs <- unname(summary(cali$Vs)[4])
-
-
-lm_eqn <- function(m){
-    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
-         list(a = format(unname(coef(m)[1]), digits = 2),
-              b = format(unname(coef(m)[2]), digits = 2),
-             r2 = format(summary(m)$r.squared, digits = 3)))
-    as.character(as.expression(eq));
-}
-
-#plot showing only well calibration sites
-all_cali %>% 
-ggplot(aes(x = log(h_v_max), y = log('max depth')))+
-  geom_point()#+
-  #geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
-  geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
-              linetype="dashed")+
-  geom_text_repel(aes(label = well))+
-  theme_classic()+
-  labs(title = "Just well calibration sites",
-       x = "Ln of Peak Resonance Frequency (Hz)",
-       y = "Ln Depth to bedrock (m)") + 
-  geom_text(x = 3.5, y = 2.4, label = lm_eqn(model), parse = TRUE, size = 4)
-```
-
-```{r calibration-curve}
-# 7/18/24
-# redoing calibration curve
-cali <- read_csv("calicurve_wells.csv")
-all_cali <- read_csv("all_cali.csv")
-
-plot(cali$freq, cali$depth)
-model <- lm(log(cali$depth)~log(cali$freq))
-
-summary(model)
-#calculate what the shear wave velocity should be
-cali$Vs <- cali$freq * 4 * cali$depth
-summary(cali$Vs)
-mean_Vs <- unname(summary(cali$Vs)[4])
-
-cali %>% 
-  mutate(calc_depth = mean_Vs / (4* freq),
-         diff = abs(depth - calc_depth)) %>%
-summary()
-
-#mean error = -0.36
-# mean abs error is 1.2
-lm_eqn <- function(m){
-    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
-         list(a = format(unname(coef(m)[1]), digits = 2),
-              b = format(unname(coef(m)[2]), digits = 2),
-             r2 = format(summary(m)$r.squared, digits = 3)))
-    as.character(as.expression(eq));
-}
-p1 <- p + geom_text(x = 3, y = 2.5, label = lm_eqn(df), parse = TRUE)
-
-#plot showing only well calibration sites
-cali %>% 
-  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
-  unique() %>% 
-ggplot(aes(x = log(avg), y = log(depth)))+
-  geom_point()+
-  geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
-  geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
-              linetype="dashed")+
-  geom_text_repel(aes(label = well))+
-  theme_classic()+
-  labs(title = "Just well calibration sites",
-       x = "Ln of Peak Resonance Frequency (Hz)",
-       y = "Ln Depth to bedrock (m)") + 
-  geom_text(x = 3.5, y = 2.4, label = lm_eqn(model), parse = TRUE, size = 4)
-
-#well calibration not in log scale
-cali <- cali %>% 
-  filter(well != "52_4_D1",
-         well != "52_4_D2")
-model_lm <- lm((cali$depth)~(cali$freq), data = cali)
-summary(model_lm)
-cali %>% 
-  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
-  unique() %>% 
-ggplot(aes(x = (avg), y = (depth)))+
-  geom_point()+
-  geom_errorbar(aes(xmin=(avg-sd), xmax=(avg+sd)))+
-  geom_abline(intercept = model_lm$coefficients[1],slope = model_lm$coefficients[2],
-              linetype="dashed")+
-  geom_text_repel(aes(label = well))+
-  theme_classic()+
-  labs(title = "Well calibration sites",
-       x = "Peak Resonance Frequency (Hz)",
-       y = "Depth to bedrock (m)")
-
-#plot showing all calibration sites
-all_cali %>% 
-  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
-  rename(depth = 'max depth') %>% 
-  na.omit() %>% 
-  filter(depth != 12) %>% 
-ggplot()+
-  geom_point(aes(x = h_v_max, y =  depth, color = type))+
-  theme_classic()+
-  labs(title = "All calibration sites",
-       x = "Peak Resonance Frequency (Hz)",
-       y = "Depth to bedrock (m)")
-  # scale_x_continuous(trans='log2')+
-  # scale_y_continuous(trans='log2')
-
-#plot showing only the highest quality measurements
-  all_cali %>% 
-  dplyr::select(h_v_max, 'max depth', type, quality) %>% 
-  rename(depth = 'max depth') %>% 
-  na.omit() %>% 
-  filter(depth != 12) %>% 
-  filter(quality == "yes") %>% 
-ggplot(aes(x = h_v_max, y =  depth))+
-  geom_point(aes(color = type))+
-    geom_smooth(method = 'lm', se = FALSE)+
-    theme_classic()+
-  labs(title = "Only high confidence calibration sites",
-       x = "Peak Resonance Frequency (Hz)",
-       y = "Depth to bedrock (m)")
-  
-good <-   all_cali %>% 
-  dplyr::select(h_v_max, 'max depth', type, quality, Vs_min, Vs_max) %>% 
-  rename(depth = 'max depth') %>% 
-  na.omit() %>% 
-  filter(depth != 12) %>% 
-  filter(quality == "yes") 
-  
-mean(good$Vs_min)
-```
-Sanity check- take all observations not used in krig- holes not to bedrock- and see if they could be dug with this depth raster!
-```{r log model}
-## Calibration in Log scale
-### Fit log log model
-model_lm <- lm(log(depth)~log(freq), data = cali)
-summary(model_lm)
-### Plot of log log model fit
-cali %>% 
-  reframe(avg = mean(freq), depth = depth, sd = sd(freq), .by = well) %>% 
-  unique() %>% 
-ggplot(aes(x = log(avg), y = log(depth)))+
-  geom_point()+
-  geom_smooth(method = 'lm')+
-  geom_errorbar(aes(xmin=log(avg-sd), xmax=log(avg+sd)))+
-  # geom_abline(intercept = model$coefficients[1],slope = model$coefficients[2],
-  #             linetype="dashed")+
-  geom_text_repel(aes(label = well))+
-  theme_classic()+
-  labs(title = "Just well calibration sites",
-       x = "Ln of Peak Resonance Frequency (Hz)",
-       y = "Ln Depth to bedrock (m)")
-
-
-
-modeled_depth <- seis_f0 %>% 
-  rename(freq = "h_v_max") %>% 
-predict(model_lm, ., se.fit = TRUE) %>% 
-  as.data.frame() %>% 
-  tibble() %>% 
-  mutate(fit_min = fit - se.fit,
-         fit_max = fit + se.fit) %>% 
-  mutate(depth = exp(fit),
-         depth_min = exp(fit_min),
-         depth_max = exp(fit_max),
-         se = exp(se.fit)) %>% 
-  bind_cols(seis_f0)
-
-## Use predict on min, max f0
-seis_f0_prepped <- seis_f0 %>% 
-  filter(grilla_number != 114) %>% 
-  mutate(f0_max = h_v_max + sd,
-         f0_min = h_v_max - sd)
-# f0 smaller = deeper depth
-seis_f0_prepped %>% 
-  rename(freq = "f0_min") %>% 
-predict(model_lm, ., se.fit = TRUE) %>% 
-  as.data.frame() %>% 
-  tibble() %>% 
-  mutate(depth = exp(fit),
-         dpeth_min = exp(fit - se.fit),
-         depth_max = exp(fit + se.fit))
-# f0 bigger = shallower depth
-seis_f0_prepped %>% 
-  rename(freq = "f0_max") %>% 
-predict(model_lm, ., se.fit = TRUE) %>% 
-  as.data.frame() %>% 
-  tibble() %>% 
-  mutate(depth = exp(fit),
-         dpeth_min = exp(fit) - exp(se.fit),
-         depth_max = exp(fit) + exp(se.fit)) #%>% 
-  select(depth_max)
-
-```
 Plot new depth and error from regression; just error from regression
 ```{r}
 
@@ -2227,23 +2321,28 @@ ggplot()+
 ```
 
 
-
+# Monte Carlo experiments
+## Enter the casino
 GPT error propagation method
 ```{r}
 # train power law model
+# first, remove everything with sd greater than 1/2 measurement, causing problems later on
 train <- cali
 fit <- lm(log(depth) ~ log(freq), data = train)
+summary(fit)
 
 beta_hat <- coef(fit)        # coefficients
 V_beta   <- vcov(fit)        # covariance matrix
 sigma_res <- sigma(fit)      # residual SD
 
 
-newdata <- seis_f0 %>% 
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < h_v_max/2) %>% 
   rename(freq = "h_v_max",
          freq_sd = "sd")
-newdata$freq
-newdata$freq_sd
+#newdata$freq
+#newdata$freq_sd
 
 nsim <- 5000   # usually 2000–10000 is good
 
@@ -2283,13 +2382,16 @@ results <- lapply(
     )
 )
 
+
+
 newdata$depth_mean <- sapply(results, mean, na.rm=TRUE)
 newdata$depth_sd   <- sapply(results, sd, na.rm=TRUE)
 newdata$depth_cv <- newdata$depth_sd / newdata$depth_mean
 
-newdata$depth_p05  <- sapply(results, quantile, 0.05, na.rm=TRUE)
+newdata$depth_p025  <- sapply(results, quantile, 0.025, na.rm=TRUE)
 newdata$depth_p50  <- sapply(results, quantile, 0.50, na.rm=TRUE) # same thing as median
-newdata$depth_p95  <- sapply(results, quantile, 0.95, na.rm=TRUE)
+newdata$depth_p975  <- sapply(results, quantile, 0.975, na.rm=TRUE)
+head(newdata)
 summary(newdata)
 hist(results[[5]], breaks = 50,
      main = "Depth uncertainty distribution",
@@ -2304,6 +2406,427 @@ newdata %>%
   filter(depth_sd >= 5)
 
 ```
+Second attempt
+```{r}
+# Assume you have calibration data:
+# f0_calib (Hz), H_calib (m)
+train <- cali
+fit <- lm(log(depth) ~ log(freq), data = train)
+
+df <- data.frame(
+  logf0 = log(cali$freq),
+  logH  = log(cali$depth)
+)
+
+fit <- lm(logH ~ logf0, data = df)
+
+# Extract parameters
+theta_hat <- coef(fit)              # (alpha, beta)
+Sigma_theta <- vcov(fit)            # covariance matrix
+sigma_reg <- summary(fit)$sigma     # residual std dev
+
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < h_v_max/2) %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < 2) %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+
+mc_depth <- function(f0_mean, f0_sd, n = 10000,
+                     theta_hat, Sigma_theta, sigma_reg) {
+
+  # Convert to log space
+  mu_logf0 <- log(f0_mean)
+  sd_logf0 <- f0_sd / f0_mean   # delta-method approximation
+
+  # Sample f0 uncertainty
+  logf0_sim <- rnorm(n, mu_logf0, sd_logf0)
+
+  # Sample regression parameters
+  theta_sim <- mvrnorm(n, mu = theta_hat, Sigma = Sigma_theta)
+  alpha_sim <- theta_sim[,1]
+  beta_sim  <- theta_sim[,2]
+
+  # Sample residual noise
+  eps_sim <- rnorm(n, 0, sigma_reg)
+
+  # Compute log depth
+  logH_sim <- alpha_sim + beta_sim * logf0_sim + eps_sim
+
+  # Convert back
+  H_sim <- exp(logH_sim)
+
+  return(H_sim)
+}
+
+
+# Example vectors
+f0_mean_vec <- newdata$freq   # mean f0 per site
+f0_sd_vec   <- newdata$freq_sd   # sd of f0 per site
+
+results <- lapply(seq_along(f0_mean_vec), function(i) {
+  H_sim <- mc_depth(
+    f0_mean = f0_mean_vec[i],
+    f0_sd   = f0_sd_vec[i],
+    n = 10000,
+    theta_hat = theta_hat,
+    Sigma_theta = Sigma_theta,
+    sigma_reg = sigma_reg
+  )
+
+  c(
+    median = median(H_sim),
+    mean   = mean(H_sim),
+    sd     = sd(H_sim),
+    p16    = quantile(H_sim, 0.16),
+    p84    = quantile(H_sim, 0.84),
+    p2.5   = quantile(H_sim, 0.025),
+    p97.5  = quantile(H_sim, 0.975)
+  )
+})
+
+results_df <- do.call(bind_rows, results) %>% tibble()
+results_df
+mc_list  # list of numeric vectors (each = H_sim for a site)
+length(mc_list) == number_of_sites
+
+# depth probability density
+df_plot <- data.frame(H = results_df)
+ggplot(df_plot, aes(x = H)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 80,
+                 fill = "grey70",
+                 color = "black",
+                 linewidth = 0.2) +
+  geom_density(linewidth = 1) +
+  geom_vline(xintercept = median(H_sim),
+             linetype = "dashed",
+             linewidth = 1) +
+  labs(
+    x = "Depth to Bedrock (m)",
+    y = "Probability Density"
+  ) +
+  theme_classic(base_size = 13)
+
+results_df$site <- seq_len(nrow(results_df))
+
+ggplot(results_df,
+       aes(x = site, y = median)) +
+
+  geom_ribbon(aes(ymin = p2.5, ymax = p97.5),
+              fill = "grey85") +
+
+  geom_ribbon(aes(ymin = p16, ymax = p84),
+              fill = "grey65") +
+
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+
+  labs(
+    x = "HVSR Site",
+    y = "Depth to Bedrock (m)"
+  ) +
+  theme_classic(base_size = 13)
+```
+## They hand you a map at check in
+```{r krig-with-split}
+# Krig with validation split
+# input params
+spatial_resolution <- 1 # meters
+split <- 0.7 # 80/20 for example
+number_of_classes <- 5 # number of classes for stratified random sampling
+set.seed(1)
+
+# define area for interpolation
+grd <- st_bbox(w3_outline) |>
+  st_as_stars(dx = spatial_resolution)
+
+# replace depth with each monte carlo realization
+first_elements_sapply <- sapply(results, "[[", 1)
+
+all_sources <-
+rbind(
+  seis %>% 
+    mutate(depth = first_elements_sapply) %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+  rename(depth = mean_depth) %>% 
+  dplyr::select(depth) %>% 
+  mutate(source = "seismic"),
+st_as_sf(wells_vect) %>% 
+  mutate(source = "gw_wells"),
+
+st_as_sf(lat_hit_rock) %>% 
+  mutate(source = "lat_weathering"),
+
+st_as_sf(scott_rocks) %>% 
+  mutate(source = "scott_pedons"),
+
+st_as_sf(rocks_1994) %>% 
+  mutate(source = "rocks_1994",
+         depth = as.numeric(0)) %>% 
+  dplyr::select(depth, geometry, source),
+
+st_as_sf(john_rocks))
+# create depth classes for stratified random sampling
+df_form <- as_tibble(no_auger)
+
+
+
+df_form$group_equal_range <- cut(df_form$depth, breaks = number_of_classes, labels = FALSE)
+
+# training versus validation split
+training <- df_form %>% 
+  group_by(group_equal_range) %>% 
+  slice_sample(, prop = split)
+
+validation <- anti_join(df_form, training)
+training_sf <- st_as_sf(training)
+validation_vect <- vect(st_as_sf(validation))
+
+# calculate the sample variogram and experimental variogram
+v <- variogram(depth~1, training_sf)
+v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
+
+# run krige
+k <- krige(depth~1, training_sf, grd, v.m)
+
+# calculate RMSE using validation split, return it
+extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>% 
+  as_tibble() %>% 
+  drop_na() %>% 
+  summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
+
+# Save Raster output
+k_terra <- rast(k) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline) %>% 
+  select(var1.pred_var1.pred)
+# Save output krigged map for whitebox operations
+plot(k_terra)
+
+krig_location <- "krig_output.tif"
+#writeRaster(k_terra, krig_location, overwrite = TRUE)
+
+# Final plot of semivariogram with all 5000 nsims, and the average one
+
+# map of average depth?
+
+```
+```{r krig-output-map}
+#map of watershed 3 with depth to bedrock
+hillshade_location <- paste0(arsenal, "/w3_dems/1mdem_hillshade.tif")
+hill <- rast(hillshade_location) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline)
+
+
+# Viridis plot
+ggplot()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
+  scale_fill_viridis_c(na.value = "transparent", alpha = 0.7, name = "Depth (m)")+
+    geom_sf(data = w3_stream, colour = "lightgray") +
+geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.3)+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))
+
+# one color plot, using magma color scheme
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = w3_stic_locs_r, aes(fill = pk), size = 3, pch = 21) +
+#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+  #add point locations of seismic measurements
+    geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
+#geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+# geom_text(data = seeps, aes(label = ID, geometry = geometry),
+#                      stat = "sf_coordinates",
+#                      nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+  #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
+  #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
+  #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps"
+  )+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+
+# plot of where validation points were good or bad
+# calculate RMSE using validation split, return it
+errors <- extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>% 
+  mutate(error = depth - var1.pred_var1.pred)
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = errors, aes(fill = error), size = 3, pch = 21) +
+  scale_fill_gradient2()+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+
+#make a map with baseflow permanence
+w3_stic_locs_baseflow <- w3_stic_locs_r %>% left_join(baseflow_pk, by = "ID")
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+    new_scale_fill() +
+  #theme(legend.position = "")+
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+    scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)",option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.1)+
+      geom_sf(data = w3_regime, colour = "lightgray") +
+
+  new_scale_fill()+
+geom_sf(data = w3_stic_locs_baseflow, aes(fill = baseflow_pk), size = 5, pch = 21) +
+#geom_sf(data = seeps, pch = 19, size = 3, color = "black") +
+  #add point locations of seismic measurements
+    geom_sf(data = combin_norm, alpha = 0.5, size = 0.5) +
+#geom_sf(data = combin_norm, aes(fill = depth), size = 3, pch = 21) +
+# geom_text(data = seeps, aes(label = ID, geometry = geometry),
+#                      stat = "sf_coordinates",
+#                      nudge_x = 25, nudge_y = 25)  #scale_fill_manual(values = c("white", "grey", "black"), type = "binned")+
+  #scale_fill_fermenter(n.breaks = 6, palette = "Greys")+
+  #scale_fill_gradient(high = "#27408B", low = "white", guide = "none")+
+  #scale_fill_viridis_c(na.value = "transparent", name = "Depth (m)")+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps"
+  )+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+    guides(colour = guide_coloursteps(show.limits = TRUE))
+
+```
+```{r AGU-version}
+# one color plot, using magma color scheme
+
+just_seis <- combin_norm %>% 
+  filter(source != "2019_auger")
+
+W3_IDs <- read_csv(paste0(arsenal, "/W3_IDs.csv"))
+W3_IDs <- W3_IDs$W3_IDs
+
+w3_final_stics <- w3_stic_locs_r %>% 
+  filter(ID %in% W3_IDs)
+
+
+ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+  new_scale_fill() +
+  geom_spatraster(data = k_terra, 
+                  aes(fill = var1.pred_var1.pred),
+                  alpha = 0.7)+
+  scale_fill_viridis_c(na.value = "transparent", 
+                       name = "Depth (m)",
+                       option = "magma")+
+  geom_sf(data = as.contour(dem1, nlevels = 30),
+          color = "white", alpha = 0.1)+
+  geom_sf(data = w3_stream, 
+          mapping = aes(linetype = "Maximum Flowing Extent"),
+          colour = "black") +
+  new_scale_fill()+
+  geom_sf(data = w3_final_stics, 
+          aes(fill = pk), 
+          size = 3, 
+          pch = 21) +
+  geom_sf(data = just_seis,
+          mapping = aes(pch = "Depth Observations"),
+          fill = "white",
+          color = "white",
+          alpha = 0.5, 
+          size = 0.5) +
+  labs(linetype = "",
+       pch = "")+
+  binned_scale(name = "Flow Persistence",
+               aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps")+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))+
+  guides(colour = guide_coloursteps(show.limits = TRUE))
+ggsave("big_map.png", scale = 1.3)
+```
+
+
 Maps of depth, standard deviation, and relative uncertainty
 ```{r}
 no_crazys_plotting <- no_crazys %>% 
@@ -2406,6 +2929,18 @@ for(i in 1:nsim){
 
   kriged[[i]] <- kr$var1.pred
 }
+
+kriged[[1]]
+
+kriged_mat <- do.call(cbind, kriged)
+grid$depth_mean <- rowMeans(kriged_mat)
+
+grid$depth_sd <- apply(kriged_mat, 1, sd)
+
+grid$depth_p05 <- apply(kriged_mat, 1, quantile, 0.05)
+
+grid$depth_p95 <- apply(kriged_mat, 1, quantile, 0.95)
+plot(grid)
 ```
 
 
