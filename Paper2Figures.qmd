@@ -157,11 +157,7 @@ plot(sheds)
 
 hb_outline <- aggregate(sheds)
 
-
-shed_colors <- c("#397367", "#FFD166", "#7E6B8F")
-
-
-# Version for AGU 25 and seismic paper, remove W3
+# Version for AGU 25 and seismic paper, just W3
 without_w3 <- 
   ggplot()+
   geom_spatraster(data = valley_hill2, maxcell = 5e+05)+#make max cells bigger on final version
@@ -169,7 +165,6 @@ without_w3 <-
   theme(legend.position = "")+
   scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"))+
     new_scale_fill() +
-  #geom_spatraster(data = m1, alpha = 0.5)+
   geom_sf(data = hb_outline, fill = NA, color = "black", alpha = 0.6, lwd = 1, lty = 2) +
   geom_sf(data = w3_outline, fill = "#FFD166", color = "#FFD166", alpha = 0.6, lwd = 1) +
   theme(rect = element_rect(fill = "transparent", color = NA))+
@@ -178,6 +173,7 @@ without_w3 <-
 
 ggsave("valley.pdf", plot = without_w3, limitsize = FALSE, units = "in", bg = NULL,scale = 2)
 
+# add points for each calibration borehole location
 
 ```
 

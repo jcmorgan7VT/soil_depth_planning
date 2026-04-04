@@ -33,7 +33,9 @@ p_load(tidyverse, sp, mapview, tmap, stars,
        randomForest,
        plotmo,
        iml, yaImpute,
-       MASS # for monte carlo simulations
+       MASS, # for monte carlo simulations
+       car, # for VIF analysis
+       caret
        )
 # Projection and file locations #####
 crs1 <- "PROJCRS[\"NAD83 / UTM zone 19N\",\n    BASEGEOGCRS[\"NAD83\",\n        DATUM[\"North American Datum 1983\",\n            ELLIPSOID[\"GRS 1980\",6378137,298.257222101,\n                LENGTHUNIT[\"metre\",1]]],\n        PRIMEM[\"Greenwich\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433]],\n        ID[\"EPSG\",4269]],\n    CONVERSION[\"UTM zone 19N\",\n        METHOD[\"Transverse Mercator\",\n            ID[\"EPSG\",9807]],\n        PARAMETER[\"Latitude of natural origin\",0,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8801]],\n        PARAMETER[\"Longitude of natural origin\",-69,\n            ANGLEUNIT[\"degree\",0.0174532925199433],\n            ID[\"EPSG\",8802]],\n        PARAMETER[\"Scale factor at natural origin\",0.9996,\n            SCALEUNIT[\"unity\",1],\n            ID[\"EPSG\",8805]],\n        PARAMETER[\"False easting\",500000,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8806]],\n        PARAMETER[\"False northing\",0,\n            LENGTHUNIT[\"metre\",1],\n            ID[\"EPSG\",8807]]],\n    CS[Cartesian,2],\n        AXIS[\"(E)\",east,\n            ORDER[1],\n            LENGTHUNIT[\"metre\",1]],\n        AXIS[\"(N)\",north,\n            ORDER[2],\n            LENGTHUNIT[\"metre\",1]],\n    USAGE[\n        SCOPE[\"Engineering survey, topographic mapping.\"],\n        AREA[\"North America - between 72°W and 66°W - onshore and offshore. Canada - Labrador; New Brunswick; Nova Scotia; Nunavut; Quebec. Puerto Rico. United States (USA) - Connecticut; Maine; Massachusetts; New Hampshire; New York (Long Island); Rhode Island; Vermont.\"],\n        BBOX[14.92,-72,84,-66]],\n    ID[\"EPSG\",26919]]"
@@ -97,6 +99,8 @@ baseflow_pk <- read_csv(paste0(arsenal, "/baseflow_pk.csv"))
 
 w3_stic_locs_r <- vect(stic_locs_snap_location) %>% 
   left_join(pks_w3, by = "ID")
+w3_stic_locs_b <- vect(stic_locs_snap_location) %>% 
+  left_join(baseflow_pk, by = "ID")
 
 w3_stic_location <- "w3_stic_locs.shp"
 #writeVector(w3_stic_locs_r, w3_stic_location)
@@ -123,7 +127,7 @@ seeps15 <- read_csv("/Users/johnmorgan/Documents/VT Research/HB_Data/W3_synoptic
 soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
 crop_soil <- crop(soil, w3_outline)
 mask_soil <- mask(crop_soil, w3_outline)
-plot(mask_soil) #currently in NAD83
+#plot(mask_soil) #currently in NAD83
 #locations and depths of soil pits, archive entry from Scott
 #https://portal.edirepository.org/nis/metadataviewer?packageid=knb-lter-hbr.210.2
 ## Scott Pedons ####
@@ -261,116 +265,6 @@ auger <- read_csv("auger_depths.csv") %>%
     vect(., geom = c("x", "y"), crs = crs1)
 
 ```
-```{r combine-inputs}
-# chunk to create depth shapefile, of points with appropriate information
-# start with just my seismic measurements
-all_sources <-
-rbind(
-#seis_sf2 <- 
-  seis %>% 
-group_by(lat, long) %>%       
-  #remove duplicate locations by taking the mean
-  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
-  arrange(desc(n_coords)) %>%
-  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1) %>% 
-  rename(depth = mean_depth) %>% 
-  dplyr::select(depth) %>% 
-  mutate(source = "seismic"),
-
-# st_as_sf(auger) %>% 
-#   mutate(source = "2019_auger"),
-
-st_as_sf(wells_vect) %>% 
-  mutate(source = "gw_wells"),
-
-st_as_sf(lat_hit_rock) %>% 
-  mutate(source = "lat_weathering"),
-
-st_as_sf(scott_rocks) %>% 
-  mutate(source = "scott_pedons"),
-
-st_as_sf(rocks_1994) %>% 
-  mutate(source = "rocks_1994",
-         depth = as.numeric(0)) %>% 
-  dplyr::select(depth, geometry, source),
-
-st_as_sf(john_rocks))
-
-
-
-# input to kriging needs to be an sf object
-
-# make a map showing input datasets and where they have coverage
-combin_norm <- vect(all_sources)
-  
-ggplot()+
-  geom_sf(data = w3_outline, fill = NA, alpha = 0.3, lwd = 1)+
-  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = combin_norm, aes(fill = depth), size = 1, pch = 21) +
-  
-  scale_fill_gradient(high = "#27408B", low = "white")+
-  facet_wrap(~source, ncol= 4)+
-  theme_classic()+
-  #geom_sf(data = w3_pour, colour = "black") +
-   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
-  theme(rect = element_rect(fill = "transparent", color = NA),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.line.y = element_blank())
-
-```
-```{r AGU-talk-just-seismic}
-
-## Plot of just seismic for AGU25 poster
-seis_alone <- seis %>% 
-group_by(lat, long) %>%       
-  #remove duplicate locations by taking the mean
-  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
-  arrange(desc(n_coords)) %>%
-  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1) %>% 
-  rename(depth = mean_depth) %>% 
-  mutate(source = "seismic")
-
-ggplot()+
-  theme_void()+
-  # geom_spatraster(data = rast(hillshade_location))+
-  # #theme(legend.position = "")+
-  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-  #                      na.value = "transparent",
-  #                      guide = "none")+
-  #   new_scale_fill() +
-  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
-  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = seis_alone, aes(fill = depth), size = 2, pch = 21) +
-  
-  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
-  #                     name = "Depth (m)")+
-  scale_fill_continuous(high = "purple4", low = "white",
-                      name = "Depth (m)")+
-  #facet_wrap(~source, ncol= 4)+
-  theme_classic()+
-  #geom_sf(data = w3_pour, colour = "black") +
-   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
-  theme(rect = element_rect(fill = "transparent", color = NA),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.line.y = element_blank(),
-        legend.position = "left")
-ggsave("w3_map_dpeth.png" )
-```
-
 
 # Calibration Curve
 Clean calibration curve run-through
@@ -387,7 +281,7 @@ combined_distributions <- minimal %>%
   mutate(weights = max(sd) - sd) %>% 
   arrange(depth) %>% 
   unique() #%>% 
-  filter(boreholeID != "52_4_D2")
+  #filter(boreholeID != "52_4_D2")
 
 just_D2 <- minimal %>% 
   group_by(boreholeID) %>% 
@@ -452,14 +346,6 @@ dummy_conf %>%
                     aes(x = f0, y = depth,
                         label = boreholeID),
                     size = 2.5)+
-  # geom_point(data = just_D2,
-  #            aes(x = f0, y = depth),
-  #            color = "darkgrey")+
-  # geom_text_repel(data = just_D2,
-  #                   aes(x = f0, y = depth,
-  #                       label = boreholeID),
-  #                 color = "darkgrey",
-  #                 size = 2.5)+
   scale_x_log10(
     limits = c(9, 60), breaks = c(10, 50, 100)
     ) +
@@ -467,24 +353,39 @@ dummy_conf %>%
     limits = c(1, 50), breaks = c(1, 5, 10)
     ) +
   labs(
-    title = expression("F"[0]*" to depth power law"),
+    title = expression("f"[0]*" to depth power law"),
     subtitle = (paste("h = ", out$A_title, "f0","^", out$b_title, ", r2 = 0.70")),
-    x = expression("f"[0]),
-    y = "depth"
+    x = expression("f"[0]*" [Hz]"),
+    y = "Depth [m]"
   ) +
   annotation_logticks()+
   theme_classic()
+ggsave("cali_curve.png")
 ```
 Use regression to calculate depth at my seismic measurement locations
-```{r}
-seis_f0 <- 
-  read_csv("HB_HVSR_10_13_25.csv") %>% 
+```{r convert f0 to depth}
+# filter out bedrock/super shallow measurements, don't need to run these through conversion
+bedrock_measurements <- 
+  read_csv("HB_HVSR_database_cleaned_4_1_26.csv") %>% 
   dplyr::select(grilla_number, lat, long, h_v_max, sd, quality) %>% 
-  #filter(quality == "yes") %>% 
+  filter(h_v_max == 0) %>% 
+  rename(depth = h_v_max) %>% 
+  dplyr::select(lat, long, depth)
+
+seis_f0 <- 
+  read_csv("HB_HVSR_database_cleaned_4_1_26.csv") %>% 
+  dplyr::select(lat, long, h_v_max, sd, quality) %>% 
+  filter(h_v_max != 0,
+         quality != "1 away",
+         quality != "2 away",
+         quality != "not sesame") %>% # exclude bedrock measurements
   #drop_na() %>% 
   rename(f0 = h_v_max)
 
-seis_predicted <- predict(model, newdata = seis_f0, interval = "confidence", level = 0.95) %>% 
+seis_predicted <- predict(model, 
+                          newdata = seis_f0, 
+                          interval = "confidence", 
+                          level = 0.80) %>% 
   exp() %>% 
   bind_cols(seis_f0) %>% 
   rename(depth = fit,
@@ -493,7 +394,7 @@ seis_predicted <- predict(model, newdata = seis_f0, interval = "confidence", lev
 
 
 
-## Plot of just seismic for AGU25 poster
+# Format depths to be ready for plotting, just as a sanity check
 seis_alone <- seis_predicted %>% 
 group_by(lat, long) %>%       
   #remove duplicate locations by taking the mean
@@ -501,29 +402,18 @@ group_by(lat, long) %>%
   arrange(desc(n_coords)) %>%
   st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
   st_transform(crs1) %>% 
-  rename(depth = mean_depth) %>% 
+  rename(depth = mean_depth,) %>% 
   mutate(source = "seismic")
 
+# map of purely HVSR determined depths
 ggplot()+
   theme_void()+
-  # geom_spatraster(data = rast(hillshade_location))+
-  # #theme(legend.position = "")+
-  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
-  #                      na.value = "transparent",
-  #                      guide = "none")+
-  #   new_scale_fill() +
   geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
   geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
   geom_sf(data = seis_alone, aes(fill = depth), size = 2, pch = 21) +
-  
-  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
-  #                     name = "Depth (m)")+
   scale_fill_continuous(high = "purple4", low = "white",
                       name = "Depth (m)")+
-  #facet_wrap(~source, ncol= 4)+
   theme_classic()+
-  #geom_sf(data = w3_pour, colour = "black") +
-   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
   theme(rect = element_rect(fill = "transparent", color = NA),
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
@@ -538,9 +428,75 @@ ggplot()+
 
 ```
 
-Analysis before the Krig
+
+# Prep for Krig
+```{r combine-inputs}
+# chunk to create depth shapefile, of points with appropriate information
+# start with just my seismic measurements
+all_sources <-
+rbind(
+#seis_sf2 <- 
+  bind_rows(bedrock_measurements, seis_predicted) %>% 
+  dplyr::select(lat, long, depth, depth_05, depth_95) %>% 
+  group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(mean_depth = mean(depth)) %>% # n() is for looking duplicate number
+    st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+    dplyr::rename(depth = mean_depth) %>% 
+  mutate(source = "seismic"),
+
+
+# st_as_sf(auger) %>% 
+#   mutate(source = "2019_auger"),
+
+st_as_sf(wells_vect) %>% 
+  mutate(source = "gw_wells"),
+
+st_as_sf(lat_hit_rock) %>% 
+  mutate(source = "lat_weathering"),
+
+st_as_sf(scott_rocks) %>% 
+  mutate(source = "scott_pedons"),
+
+st_as_sf(rocks_1994) %>% 
+  mutate(source = "rocks_1994",
+         depth = as.numeric(0)) %>% 
+  dplyr::select(depth, geometry, source),
+
+st_as_sf(john_rocks))
+
+
+
+# input to kriging needs to be an sf object
+
+# make a map showing input datasets and where they have coverage
+combin_norm <- vect(all_sources)
+  
+ggplot()+
+  geom_sf(data = w3_outline, fill = NA, alpha = 0.3, lwd = 1)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = combin_norm, aes(fill = depth), size = 1, pch = 21) +
+  
+  scale_fill_gradient(high = "#27408B", low = "white")+
+  facet_wrap(~source, ncol= 4)+
+  theme_classic()+
+  #geom_sf(data = w3_pour, colour = "black") +
+   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank())
+
+```
 Use the closest depth measurement to each STIC sensor, and plot
 ```{r depth at sensors}
+
 # STIC locations
 W3_IDs <- read_csv(paste0(arsenal, "/W3_IDs.csv"))
 W3_IDs <- W3_IDs$W3_IDs
@@ -549,18 +505,18 @@ w3_final_stics <- w3_stic_locs_r %>%
   filter(ID %in% W3_IDs)
 
 just_seis <- 
-  no_crazys %>% 
-  dplyr::select(lat, long, depth_mean, depth_sd) %>% 
+  bind_rows(bedrock_measurements, seis_predicted) %>% 
+  dplyr::select(lat, long, depth, depth_05, depth_95) %>% 
   # filter(sd <= 1) %>% 
   # pivot_longer(-c(lat, long)) %>% 
   group_by(lat, long) %>%       
   #remove duplicate locations by taking the mean
-  reframe(mean_depth = mean(depth_mean),
-            mean_sd = mean(depth_sd)) %>% # n() is for looking duplicate number
+  reframe(mean_depth = mean(depth),
+            mean_05 = mean(depth_05),
+            mean_95 = mean(depth_95)) %>% # n() is for looking duplicate number
     st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
   st_transform(crs1) %>% 
-    dplyr::rename(depth = mean_depth,
-                  sd = mean_sd) %>% 
+    dplyr::rename(depth = mean_depth) %>% 
   vect()
   
 just_seis
@@ -583,162 +539,57 @@ for(i in 1:length(W3_IDs)){
   index <- unname(which(dist_table == min(dist_table), arr.ind = TRUE)[,2])
   
   depth <- just_seis[index,]$depth
-  sd <- just_seis[index,]$sd
+  mean_05 <- just_seis[index,]$mean_05
+  mean_95 <- just_seis[index,]$mean_95
   pk <- stic$pk
   ID <- stic$ID
   output <- tibble(ID = ID,
                    pk = pk,
                    depth = depth,
-                   sd = sd,
+                   mean_05 = mean_05,
+                   mean_95 = mean_95,
                    dist = min(dist_table))
   if(i == 1) all_out <- output
   if(i > 1) all_out <- rbind(all_out, output)
 }
-all_out <- filter(all_out, sd <= 2)
-ggplot(all_out, aes(x = depth, y = pk))+
-  geom_errorbar(aes(xmin=depth-sd, xmax=depth+sd), width=.05, color = "grey") +
+#all_out <- filter(all_out, sd <= 2)
+pk_depth <- ggplot(all_out, aes(x = depth, y = pk, color = dist))+
+  geom_errorbar(aes(xmin=mean_05, xmax=mean_95), width=.05, color = "grey") +
   geom_point()+
  #geom_smooth(method = 'lm')+
-  theme_classic()+
+   theme_classic()+
+  # lims(x = c(0, 15))+
   labs(x = "Below-stream depth (m)",
        y = "Flow persistence")
-ggsave("depth.png")
+#ggsave("depth.png")
 
 lm(depth ~ pk, data = all_out) %>% summary()
-```
 
-
-```{r agu maps}
-
-## Plot of just seismic for AGU25 poster
-seis_alone <- 
-  seis_f0 %>% 
-  filter(grilla_number == 20) %>%
-  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1) 
-  #group_by(lat, long) %>%       
-  #remove duplicate locations by taking the mean
-  summarise(h_v_mean = mean(h_v_max), n_coords = n()) %>% # n() is for looking duplicate number
-  arrange(desc(n_coords)) %>%
-  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1)
-
-ggplot()+
-  theme_void()+
-  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
-  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = seis_alone, aes(fill = h_v_max), size = 2, pch = 21) +
-  scale_fill_continuous(high = "purple4", low = "white",
-                      name = "F0 (m/s)")+
-  theme_classic()+
-  theme(rect = element_rect(fill = "transparent", color = NA),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.line.y = element_blank(),
-        legend.position = "left")
-
-#seis_alone_sd <- 
-  seis_f0 %>% 
-  filter(sd < 2 * h_v_max) #%>% 
-group_by(lat, long) %>%       
-  #remove duplicate locations by taking the mean
-  summarise(sd_mean = mean(sd), n_coords = n()) %>% # n() is for looking duplicate number
-  arrange(desc(n_coords)) %>%
-  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1) 
-ggplot()+
-  theme_void()+
-  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
-  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
-  geom_sf(data = seis_alone_sd, aes(fill = sd_mean), size = 2, pch = 21) +
-  scale_fill_continuous(high = "red4", low = "white",
-                      name = "sd")+
-  theme_classic()+
-  theme(rect = element_rect(fill = "transparent", color = NA),
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.line.x = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        axis.line.y = element_blank(),
-        legend.position = "left")
-ggsave("w3_map_dpeth.png" )
-```
-
-
-```{r permanence versus cluster}
-# STIC locations
-
-clust_seis <- 
-  no_crazys %>% 
-  dplyr::select(lat, long, depth_mean, depth_sd, class) %>% 
-  # filter(sd <= 1) %>% 
-  # pivot_longer(-c(lat, long)) %>% 
-  group_by(lat, long) %>%       
-  #remove duplicate locations by taking the mean
-  reframe(mean_depth = mean(depth_mean),
-            mean_sd = mean(depth_sd),
-          cluster = class) %>% # n() is for looking duplicate number
-    st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
-  st_transform(crs1) %>% 
-    dplyr::rename(depth = mean_depth,
-                  sd = mean_sd) %>% 
-  vect()
-  
-just_seis <- clust_seis
-dist_table <- tibble(distance(just_seis, w3_final_stics))
-
-#which(m == min(m), arr.ind = TRUE)
-colnames(dist_table) <- W3_IDs
-
-dist_table <- (distance(w3_final_stics[2],just_seis))
-which(dist_table == min(dist_table), arr.ind = TRUE)[,2]
-plot(w3_final_stics)
-plot(w3_final_stics[2], add = TRUE, col = "red")
-
-plot(just_seis[69,], add = TRUE, col = "blue")
-
-#write a for loop, there might be a better way but this is what I've got
-for(i in 1:length(W3_IDs)){
-  stic <- w3_final_stics[i]
-  dist_table <- (distance(stic, just_seis))
-  index <- unname(which(dist_table == min(dist_table), arr.ind = TRUE)[,2])
-  
-  depth <- just_seis[index,]$depth
-  sd <- just_seis[index,]$sd
-  pk <- stic$pk
-  ID <- stic$ID
-  cluster <- just_seis[index,]$cluster
-  output <- tibble(ID = ID,
-                   pk = pk,
-                   depth = depth,
-                   sd = sd,
-                   dist = min(dist_table),
-                   class = cluster)
-  if(i == 1) all_out <- output
-  if(i > 1) all_out <- rbind(all_out, output)
-}
-all_out <- filter(all_out, sd <= 2)
-ggplot(all_out, aes(x = depth, y = pk))+
-  geom_errorbar(aes(xmin=depth-sd, xmax=depth+sd), width=.05, color = "grey") +
+# also plot baseflow permanence
+egfege <- pks_w3 %>% mutate(
+totaldepth1m_wshed = zonal(resample(project(depth1
+                       , zones), zones, method="bilinear"), 
+      zones, fun = "sum", na.rm = TRUE)[,2]
+) %>% filter(ID %in% W3_IDs)
+#bpk_depth <- 
+  all_out %>% left_join(baseflow_pk) %>% 
+    
+  ggplot(aes(x = totaldepth1m_wshed, y = baseflow_pk, color = dist))+
+  geom_errorbar(aes(xmin=mean_05, xmax=mean_95), width=.05, color = "grey") +
   geom_point()+
-  facet_wrap(~class)+
- #geom_smooth(method = 'lm')+
-  theme_classic()+
+ geom_smooth(method = 'lm')+
+   theme_classic()+
+   #lims(x = c(0, 7))+
   labs(x = "Below-stream depth (m)",
-       y = "Flow persistence")
-ggsave("depth.png")
+       y = "Baseflow persistence")
 
-lm(depth ~ pk, data = all_out) %>% summary()
+pk_depth + bpk_depth
+ggsave("pk_depth.png", scale = 1.2, width = 4, height = 2)
 ```
 
+Some seismic measurements are not that close to sensor locations, and others have high error from regression
+
+Maybe it will look better if I report the predicted value +/- the error instead of the actual values at the upper and lower limit of confidence?
 
 # Kriging
 Krig again, but per Yang's suggestion exclude a validation dataset and use it to calculate RMSE
@@ -774,6 +625,11 @@ validation_vect <- vect(st_as_sf(validation))
 v <- variogram(depth~1, training_sf)
 v.m <- fit.variogram(v, vgm(1, "Exp", 10, 1))
 
+# plot semivariogram
+plot(v, v.m, plot.numbers = TRUE, xlab = "distance h [m]",
+     ylab = expression(gamma(h)),
+     xlim = c(0, 1.055 * max(v$dist))) ## draws a single model; draw 2 models in single plot:
+
 # run krige
 k <- krige(depth~1, training_sf, grd, v.m)
 
@@ -784,17 +640,311 @@ extract(rast(k), validation_vect, ID = FALSE, bind = TRUE) %>%
   summarise(RMSE = sqrt(mean((depth - var1.pred_var1.pred)^2)))
 
 # Save Raster output
-k_terra <- rast(k) %>% 
+k_terra <- 
+  rast(k) %>% 
   crop(w3_outline) %>% 
   mask(w3_outline) %>% 
-  select(var1.pred_var1.pred)
+  dplyr::select(var1.pred_var1.pred)
+# also save variance of krig as an output
+k_terra_variance <- 
+  rast(k) %>% 
+  crop(w3_outline) %>% 
+  mask(w3_outline) %>% 
+  dplyr::select(var1.var_var1.var) %>% 
+  rename(variance = var1.var_var1.var)
 # Save output krigged map for whitebox operations
-plot(k_terra)
+plot(k_terra_variance)
 
 krig_location <- "krig_output.tif"
 writeRaster(k_terra, krig_location, overwrite = TRUE)
 
 ```
+```{r contour plots}
+# Generated function
+make_contours_sf <- function(r,
+                             interval = 10,
+                             major_interval = 50,
+                             crs_out = NULL) {
+
+  library(terra)
+  library(sf)
+  library(dplyr)
+
+  stopifnot(inherits(r, "SpatRaster"))
+
+  # ---- range ----
+  rng <- as.numeric(terra::minmax(r))
+
+  minor_levels <- seq(
+    floor(rng[1] / interval) * interval,
+    ceiling(rng[2] / interval) * interval,
+    by = interval
+  )
+
+  major_levels <- seq(
+    floor(rng[1] / major_interval) * major_interval,
+    ceiling(rng[2] / major_interval) * major_interval,
+    by = major_interval
+  )
+
+  # ---- create contours ----
+  minor <- terra::as.contour(r, levels = minor_levels)
+  major <- terra::as.contour(r, levels = major_levels)
+
+  names(minor)[1] <- "elev"
+  names(major)[1] <- "elev"
+
+  minor$type <- "minor"
+  major$type <- "major"
+
+  contours_sf <- sf::st_as_sf(rbind(minor, major))
+
+  if (!is.null(crs_out)) {
+    contours_sf <- sf::st_transform(contours_sf, crs_out)
+  }
+
+  # =====================================================
+  # SAFE LABEL GENERATION (geometry-agnostic)
+  # =====================================================
+
+  major_sf <- contours_sf |> dplyr::filter(type == "major")
+
+  # detect geometry types
+  gtypes <- unique(sf::st_geometry_type(major_sf))
+
+  # only extract if collections exist
+  if ("GEOMETRYCOLLECTION" %in% gtypes) {
+    major_sf <- sf::st_collection_extract(major_sf, "LINESTRING")
+  }
+
+  # ensure LINESTRING geometries
+  major_sf <- sf::st_cast(major_sf, "LINESTRING", warn = FALSE)
+
+  # remove empty features
+  major_sf <- major_sf[!sf::st_is_empty(major_sf), ]
+
+  # midpoint label placement
+  labels_sf <- sf::st_line_sample(major_sf, sample = 0.5) |>
+    sf::st_cast("POINT")
+
+  labels_sf$elev <- major_sf$elev
+
+  list(
+    contours = contours_sf,
+    labels   = labels_sf
+  )
+}
+
+surface_conts <- make_contours_sf(
+  dem1,
+  interval = 10,
+  major_interval = 50
+)
+
+surface_conts_plot <- 
+  ggplot() +
+  theme_void()+
+  geom_sf(data = surface_conts$contours,
+          aes(color = type)) +
+geom_sf(data = w3_regime, 
+                aes(lty = StrType),
+                colour = "blue", lwd = 0.5) +
+  geom_sf_label(data = surface_conts$labels[1:4],
+               aes(label = surface_conts$labels$elev),
+               size = 3,
+               fill = "white",
+               border.color = "white",
+               label.padding = unit(0.1, "lines")) +
+      geom_sf(data = w3_outline, colour = "black", lwd = 1, fill = NA) +
+  scale_color_manual(
+    values = c(minor = "grey",
+               major = "black"),
+    guide = "none")+
+  scale_linetype_manual(
+    name = "Flow Regime",
+    values = c(I = 2,
+               E = 3,
+               P = 1)
+  )+
+  labs(title = "A. 10m surface topography contours")
+
+
+subsurface_conts <- make_contours_sf(
+  k_terra,
+  interval = 1,
+  major_interval = 5
+)
+chosen <- c(1, 6, 4, 10, 12, 13, 14)
+
+subsurface_conts_plot <- 
+  ggplot() +
+  theme_void()+
+  geom_sf(data = subsurface_conts$contours,
+          aes(color = type)) +
+geom_sf(data = w3_regime, 
+                aes(lty = StrType),
+                colour = "blue", lwd = 0.5) +
+  geom_sf_label(data = subsurface_conts$labels[chosen],
+               aes(label = subsurface_conts$labels$elev[chosen]),
+               size = 3,
+               fill = "white",
+               border.color = "white",
+               label.padding = unit(0.1, "lines")) +
+      geom_sf(data = w3_outline, colour = "black", lwd = 1, fill = NA) +
+  scale_color_manual(
+    values = c(minor = "grey",
+               major = "black"),
+    guide = "none")+
+  scale_linetype_manual(
+    name = "Flow Regime",
+    values = c(I = 2,
+               E = 3,
+               P = 1)
+  )+
+  labs(title = "C. 1m overburden thickness contours")
+
+# bedrock topography
+bedrock_topo_conts <- make_contours_sf(
+  dem1 - k_terra,
+  interval = 10,
+  major_interval = 50
+)
+
+bedrock_topo_plot <- 
+  ggplot() +
+  theme_void()+
+  geom_sf(data = bedrock_topo_conts$contours,
+          aes(color = type)) +
+geom_sf(data = w3_regime, 
+                aes(lty = StrType),
+                colour = "blue", lwd = 0.5) +
+  geom_sf_label(data = bedrock_topo_conts$labels[1:4],
+               aes(label = bedrock_topo_conts$labels$elev[1:4]),
+               size = 3,
+               fill = "white",
+               border.color = "white",
+               label.padding = unit(0.1, "lines")) +
+      geom_sf(data = w3_outline, colour = "black", lwd = 1, fill = NA) +
+  scale_color_manual(
+    values = c(minor = "grey",
+               major = "black"),
+    guide = "none")+
+  scale_linetype_manual(
+    name = "Flow Regime",
+    values = c(I = 2,
+               E = 3,
+               P = 1)
+  )+
+  labs(title = "B. 10m bedrock topography contours")
+
+surface_conts_plot + bedrock_topo_plot +  subsurface_conts_plot + plot_layout(guides = "collect")
+ggsave("contour_plots.png", scale = 2)
+
+
+```
+```{r contours with soil map}
+#subsurface_conts_plot <- 
+#plot(mask_soil)
+
+key <- read_csv("HPU_num_key.csv")
+mask_soil <- 
+  mutate()
+
+mask_soil <- as.factor(mask_soil)
+levels(mask_soil) <- data.frame(
+  "ID" = c(
+    5, 4, 2, 8, 3, 1, 6, 7
+  ),
+  "f083871fa0116b17b7398ca48eac7627" = c(
+  "5"," 4"," 2", "8", "3", "1", "6", "7")
+)
+is.factor(mask_soil)
+colors <- c("black",
+            "#CCCCCC",
+            "#734C00",
+            "#FFFF73",
+            "#267300",
+            "#55FF00",
+            )
+soil_names <- c(
+  "Bedrock Histosol",
+  "E",
+  "Bhs",
+  "Typical",
+  "Bimodal",
+  "Bh"
+)
+  ggplot() +
+    geom_spatraster(data = (mask_soil),
+                    alpha = 0.8)+
+scale_fill_manual(values = colors,
+                  labels = soil_names,
+                  na.value = NA)+
+  theme_void()+
+  geom_sf(data = subsurface_conts$contours,
+          aes(color = type)) +
+geom_sf(data = w3_regime, 
+                aes(lty = StrType),
+                colour = "blue", lwd = 0.5) +
+  geom_sf_label(data = subsurface_conts$labels[chosen],
+               aes(label = subsurface_conts$labels$elev[chosen]),
+               size = 3,
+               fill = "white",
+               border.color = "white",
+               label.padding = unit(0.1, "lines")) +
+      geom_sf(data = w3_outline, colour = "black", lwd = 1, fill = NA) +
+
+  scale_color_manual(
+    values = c(minor = "grey",
+               major = "black"),
+    guide = "none")+
+  scale_linetype_manual(
+    name = "Flow Regime",
+    values = c(I = 2,
+               E = 3,
+               P = 1)
+  )+
+  labs(title = "1 m overburden thickness contours")
+```
+```{r contours with hillshade}
+#subsurface_conts_plot <- 
+#plot(mask_soil)
+
+  ggplot() +
+  geom_spatraster(data = hill, alpha = 0.8)+
+  theme_void()+
+  #theme(legend.position = "")+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+  theme_void()+
+  geom_sf(data = subsurface_conts$contours,
+          aes(color = type)) +
+geom_sf(data = w3_regime, 
+                aes(lty = StrType),
+                colour = "blue", lwd = 0.5) +
+  geom_sf_label(data = subsurface_conts$labels[chosen],
+               aes(label = subsurface_conts$labels$elev[chosen]),
+               size = 3,
+               fill = "white",
+               border.color = "white",
+               label.padding = unit(0.1, "lines")) +
+      geom_sf(data = w3_outline, colour = "black", lwd = 1, fill = NA) +
+
+  scale_color_manual(
+    values = c(minor = "grey27",
+               major = "black"),
+    guide = "none")+
+  scale_linetype_manual(
+    name = "Flow Regime",
+    values = c(I = 2,
+               E = 3,
+               P = 1)
+  )+
+  labs(title = "1 m overburden thickness contours")
+```
+
+old chunk of code with a ton of maps
 ```{r krig-output-map}
 #map of watershed 3 with depth to bedrock
 hillshade_location <- paste0(arsenal, "/w3_dems/1mdem_hillshade.tif")
@@ -802,7 +952,10 @@ hill <- rast(hillshade_location) %>%
   crop(w3_outline) %>% 
   mask(w3_outline)
 
-
+plot(shade(
+  terrain(k_terra, "slope"),
+  terrain(k_terra, "aspect")),
+  col = c("white","grey", "darkgrey","black"))
 # Viridis plot
 ggplot()+
   geom_spatraster(data = hill)+
@@ -820,6 +973,45 @@ geom_sf(data = as.contour(dem1, nlevels = 30), color = "white", alpha = 0.3)+
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))
 
+# plot for scott, of subsurface contour
+subsurface <- 
+  ggplot()+
+   # geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+  #                      na.value = "transparent",
+  #                      guide = "none")+
+  #   new_scale_fill() +
+ #  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
+ # scale_fill_viridis_c(na.value = "transparent", alpha = 0.7, name = "Depth (m)")+
+    # geom_sf(data = w3_stream, colour = "black", lty = 1) +
+geom_sf(data = as.contour(dem1 - k_terra, nlevels = 20), color = "black", alpha = 0.5)+
+      geom_sf(data = w3_outline, colour = "black", lwd = 1.5) +
+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))
+surface <- ggplot()+
+   # geom_spatraster(data = hill)+
+  theme_void()+
+  #theme(legend.position = "")+
+  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+  #                      na.value = "transparent",
+  #                      guide = "none")+
+  #   new_scale_fill() +
+ #  geom_spatraster(data = k_terra, aes(fill = var1.pred_var1.pred))+
+ # scale_fill_viridis_c(na.value = "transparent", alpha = 0.7, name = "Depth (m)")+
+    # geom_sf(data = w3_stream, colour = "black", lty = 1) +
+geom_sf(data = as.contour(dem1, nlevels = 20), color = "black", alpha = 0.5)+
+      geom_sf(data = w3_outline, colour = "black", lwd = 1.5) +
+
+  ggspatial::annotation_scale(location = 'tr',
+                              pad_x = unit(0.4, "cm"),
+                              pad_y = unit(1, "cm"))
+
+surface + subsurface
+ggsave("contours.pdf")
 # one color plot, using magma color scheme
 ggplot()+
   theme_void()+
@@ -939,6 +1131,7 @@ geom_sf(data = w3_stic_locs_baseflow, aes(fill = baseflow_pk), size = 5, pch = 2
     guides(colour = guide_coloursteps(show.limits = TRUE))
 
 ```
+Final versions of krig map and variance plot
 ```{r AGU-version}
 # one color plot, using magma color scheme
 
@@ -952,7 +1145,7 @@ w3_final_stics <- w3_stic_locs_r %>%
   filter(ID %in% W3_IDs)
 
 
-ggplot()+
+depth_final <- ggplot()+
   theme_void()+
   geom_spatraster(data = hill)+
   theme_void()+
@@ -996,8 +1189,55 @@ ggplot()+
                               pad_x = unit(0.4, "cm"),
                               pad_y = unit(1, "cm"))+
   guides(colour = guide_coloursteps(show.limits = TRUE))
-ggsave("big_map.png", scale = 1.3)
 ```
+```{r variance plot}
+k_terra_variance
+
+variance_final <- ggplot()+
+  theme_void()+
+  geom_spatraster(data = hill)+
+  theme_void()+
+  scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+                       na.value = "transparent",
+                       guide = "none")+
+  new_scale_fill() +
+  geom_spatraster(data = k_terra_variance, 
+                  aes(fill = variance),
+                  alpha = 0.7)+
+  scale_fill_viridis_c(na.value = "transparent", 
+                       name = "Variance (m^2)")+
+  geom_sf(data = as.contour(dem1, nlevels = 30),
+          color = "white", alpha = 0.1)+
+  geom_sf(data = w3_stream,
+          colour = "black") +
+  new_scale_fill()+
+  # geom_sf(data = w3_final_stics, 
+  #         aes(fill = pk), 
+  #         size = 3, 
+  #         pch = 21) +
+  geom_sf(data = just_seis,
+          fill = "white",
+          color = "white",
+          alpha = 0.5, 
+          size = 0.5) +
+  labs(linetype = "",
+        pch = "")+
+  # binned_scale(name = "Flow Persistence",
+  #              aesthetics = "fill",
+  #              scale_name = "stepsn", 
+  #              palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+  #              breaks = c(0.25, 0.5, 0.75),
+  #              limits = c(0, 1),
+  #              show.limits = TRUE, 
+  #              guide = "none")+
+  
+  guides(colour = guide_coloursteps(show.limits = TRUE))
+
+depth_final + variance_final
+ggsave("big_map.png", scale = 3)
+
+```
+
 
 ```{r}
 # try to use mapview and mapedit to manually select stream reaches of interest
@@ -1356,7 +1596,7 @@ n <- 32
 my_colors <- sample(col_vector, n)
 
 # define extent so they match, set up plot
-plot_extent <- ext(bed_sheds)
+plot_extent <- ext(zones)
 par(mfrow = c(1, 2))
 
 # plot surface drainage areas
@@ -1816,6 +2056,7 @@ plot(rast(w3_sub_shed) - rast(bed_sub_shed))
 
 # Longitudinal Profiles
 Relevant calculations were done in Arc
+Current good long profiles code, not sure what the second chunk does differently
 ```{r Longitidunal-profiles}
 exaggeration <- 3
 E3_seis_og <- read_csv("./transect_exports_oct1/E3seis.csv") %>% 
@@ -1940,40 +2181,17 @@ rbind(E3_seis, E3_surface,
     #  scale_x_reverse()+
   geom_point(data = stics, aes(x = dist, y = elevation, fill = pk),
              size = 4, pch = 21)+
-  scale_fill_viridis_c()+
-  facet_wrap(~trib, scales = "free")
+  facet_wrap(~trib, scales = "free")+
+  binned_scale(aesthetics = "fill",
+               scale_name = "stepsn", 
+               palette = function(x) c("#F0F2FA", "#B3C0E5","#4969C1", "#2A3F7A"),
+               breaks = c(0.25, 0.5, 0.75),
+               limits = c(0, 1),
+               show.limits = TRUE, 
+               guide = "colorsteps",
+               name = "Flow Persistence")
+ggsave("along_tributaries.png", width = 4, height = 2, scale = 2.5)
 
-
-plot1 <- fungal %>% 
-  #select(grilla_number, sum, elevation_m, surfaceMinusDepth) %>% 
-  rename(Surface = RASTERVALU, Bedrock = bedrock) %>% 
-  mutate(Bedrock = Bedrock) %>% 
-  pivot_longer(cols = c(Surface, Bedrock)) %>% 
-  ggplot(aes(x = cum_dist_m, y = value))+
-  geom_line(aes(lty = name))+
-  #error bars are so small, not worth showing
-      #  geom_errorbar(aes(ymin=bedrock_sd_n, ymax=bedrock_sd_p))+
-  geom_point(data = fungal,
-            aes(x = cum_dist_m, y = bedrock))+
-    theme_classic()+
-      scale_x_reverse()+
-  geom_point(data = stic_xsec, 
-             aes(x = cum_dist_m, y = RASTERVALU, color = pk), size = 3)+
-  geom_text(data = stic_xsec, 
-             aes(x = cum_dist_m, y = RASTERVALU, 
-                 label = paste0(signif(pk, 2), "%")),
-            nudge_x = 20,
-            nudge_y = 10)+
-  labs(x = "Distance to outlet (m)",
-       y = "Elevation (m)")+
-  scale_linetype_manual(values = c(2, 1), 
-                        name = "")+
-  scale_color_continuous(type = "gradient",
-                         name = "Flow Duration",
-                         breaks = c(50, 70, 90),
-                         #limits = c(0.5, 1),
-                        labels = c("50%", "70%", "90%"))
-plot1
 ```
 ```{r Longitidunal-profiles}
 exaggeration <- 3
@@ -2072,6 +2290,7 @@ plot1 <- fungal %>%
                          breaks = c(50, 70, 90),
                          #limits = c(0.5, 1),
                         labels = c("50%", "70%", "90%"))
+  
 plot1
 ```
 
@@ -2258,219 +2477,7 @@ ggplot()+
 ```
 
 
-# Monte Carlo experiments
-## Enter the casino
-GPT error propagation method
-```{r}
-# train power law model
-# first, remove everything with sd greater than 1/2 measurement, causing problems later on
-train <- cali
-fit <- lm(log(depth) ~ log(freq), data = train)
-summary(fit)
 
-beta_hat <- coef(fit)        # coefficients
-V_beta   <- vcov(fit)        # covariance matrix
-sigma_res <- sigma(fit)      # residual SD
-
-
-newdata <- 
-  seis_f0 %>% 
-  filter(sd < h_v_max/2) %>% 
-  rename(freq = "h_v_max",
-         freq_sd = "sd")
-#newdata$freq
-#newdata$freq_sd
-
-nsim <- 5000   # usually 2000–10000 is good
-
-beta_sim <- mvrnorm(nsim, beta_hat, V_beta)
-
-simulate_depth <- function(freq, freq_sd) {
-
-  # 1. simulate true frequencies
-  freq_sim <- rnorm(nsim, mean = freq, sd = freq_sd)
-
-  # avoid impossible values
-  freq_sim[freq_sim <= 0] <- NA
-
-  log_freq_sim <- log(freq_sim)
-
-  # 2. regression prediction
-  log_depth_sim <-
-    beta_sim[,1] +
-    beta_sim[,2] * log_freq_sim
-
-  # 3. add residual variability (optional but recommended)
-  log_depth_sim <-
-    log_depth_sim + rnorm(nsim, 0, sigma_res)
-
-  # 4. convert back to depth
-  depth_sim <- exp(log_depth_sim)
-
-  depth_sim
-}
-
-results <- lapply(
-  seq_len(nrow(newdata)),
-  function(i)
-    simulate_depth(
-      newdata$freq[i],
-      newdata$freq_sd[i]
-    )
-)
-
-
-
-newdata$depth_mean <- sapply(results, mean, na.rm=TRUE)
-newdata$depth_sd   <- sapply(results, sd, na.rm=TRUE)
-newdata$depth_cv <- newdata$depth_sd / newdata$depth_mean
-
-newdata$depth_p025  <- sapply(results, quantile, 0.025, na.rm=TRUE)
-newdata$depth_p50  <- sapply(results, quantile, 0.50, na.rm=TRUE) # same thing as median
-newdata$depth_p975  <- sapply(results, quantile, 0.975, na.rm=TRUE)
-head(newdata)
-summary(newdata)
-hist(results[[5]], breaks = 50,
-     main = "Depth uncertainty distribution",
-     xlab = "Depth")
-
-
-no_crazys <- newdata %>% 
-  filter(depth_sd <= 5)
-hist(no_crazys$depth_p50)
-summary(no_crazys)
-newdata %>% 
-  filter(depth_sd >= 5)
-
-```
-Second attempt
-```{r}
-# Assume you have calibration data:
-# f0_calib (Hz), H_calib (m)
-train <- cali
-fit <- lm(log(depth) ~ log(freq), data = train)
-
-df <- data.frame(
-  logf0 = log(cali$freq),
-  logH  = log(cali$depth)
-)
-
-fit <- lm(logH ~ logf0, data = df)
-
-# Extract parameters
-theta_hat <- coef(fit)              # (alpha, beta)
-Sigma_theta <- vcov(fit)            # covariance matrix
-sigma_reg <- summary(fit)$sigma     # residual std dev
-
-newdata <- 
-  seis_f0 %>% 
-  filter(sd < h_v_max/2) %>% 
-  rename(freq = "h_v_max",
-         freq_sd = "sd")
-
-newdata <- 
-  seis_f0 %>% 
-  filter(sd < 2) %>% 
-  rename(freq = "h_v_max",
-         freq_sd = "sd")
-
-mc_depth <- function(f0_mean, f0_sd, n = 10000,
-                     theta_hat, Sigma_theta, sigma_reg) {
-
-  # Convert to log space
-  mu_logf0 <- log(f0_mean)
-  sd_logf0 <- f0_sd / f0_mean   # delta-method approximation
-
-  # Sample f0 uncertainty
-  logf0_sim <- rnorm(n, mu_logf0, sd_logf0)
-
-  # Sample regression parameters
-  theta_sim <- mvrnorm(n, mu = theta_hat, Sigma = Sigma_theta)
-  alpha_sim <- theta_sim[,1]
-  beta_sim  <- theta_sim[,2]
-
-  # Sample residual noise
-  eps_sim <- rnorm(n, 0, sigma_reg)
-
-  # Compute log depth
-  logH_sim <- alpha_sim + beta_sim * logf0_sim + eps_sim
-
-  # Convert back
-  H_sim <- exp(logH_sim)
-
-  return(H_sim)
-}
-
-
-# Example vectors
-f0_mean_vec <- newdata$freq   # mean f0 per site
-f0_sd_vec   <- newdata$freq_sd   # sd of f0 per site
-
-results <- lapply(seq_along(f0_mean_vec), function(i) {
-  H_sim <- mc_depth(
-    f0_mean = f0_mean_vec[i],
-    f0_sd   = f0_sd_vec[i],
-    n = 10000,
-    theta_hat = theta_hat,
-    Sigma_theta = Sigma_theta,
-    sigma_reg = sigma_reg
-  )
-
-  c(
-    median = median(H_sim),
-    mean   = mean(H_sim),
-    sd     = sd(H_sim),
-    p16    = quantile(H_sim, 0.16),
-    p84    = quantile(H_sim, 0.84),
-    p2.5   = quantile(H_sim, 0.025),
-    p97.5  = quantile(H_sim, 0.975)
-  )
-})
-
-results_df <- do.call(bind_rows, results) %>% tibble()
-results_df
-mc_list  # list of numeric vectors (each = H_sim for a site)
-length(mc_list) == number_of_sites
-
-# depth probability density
-df_plot <- data.frame(H = results_df)
-ggplot(df_plot, aes(x = H)) +
-  geom_histogram(aes(y = after_stat(density)),
-                 bins = 80,
-                 fill = "grey70",
-                 color = "black",
-                 linewidth = 0.2) +
-  geom_density(linewidth = 1) +
-  geom_vline(xintercept = median(H_sim),
-             linetype = "dashed",
-             linewidth = 1) +
-  labs(
-    x = "Depth to Bedrock (m)",
-    y = "Probability Density"
-  ) +
-  theme_classic(base_size = 13)
-
-results_df$site <- seq_len(nrow(results_df))
-
-ggplot(results_df,
-       aes(x = site, y = median)) +
-
-  geom_ribbon(aes(ymin = p2.5, ymax = p97.5),
-              fill = "grey85") +
-
-  geom_ribbon(aes(ymin = p16, ymax = p84),
-              fill = "grey65") +
-
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-
-  labs(
-    x = "HVSR Site",
-    y = "Depth to Bedrock (m)"
-  ) +
-  theme_classic(base_size = 13)
-```
-## They hand you a map at check in
 ```{r krig-with-split}
 # Krig with validation split
 # input params
@@ -2730,8 +2737,8 @@ ggplot()+
   scale_fill_viridis_c(na.value = "transparent", 
                        name = "Depth (m)",
                        option = "magma")+
-  geom_sf(data = as.contour(dem1, nlevels = 30),
-          color = "white", alpha = 0.1)+
+  # geom_sf(data = as.contour(dem1, nlevels = 30),
+  #         color = "white", alpha = 0.1)+
   geom_sf(data = w3_stream, 
           mapping = aes(linetype = "Maximum Flowing Extent"),
           colour = "black") +
@@ -3006,7 +3013,55 @@ ggplot()+
 # RF to try to tell a story
 Create input dataset to RF...
 Different neighborhoods and different spatial scales of topography and depth, to try and predict flow permanence and baseflow flow permanence
+
+```{r}
+#trouble shooting
+plot(zones)
+plot(mask_soil_uniform)
+plot(project(mask_soil_uniform, zones))
+plot(resample(project(mask_soil_uniform, zones), zones, method="bilinear"), add = TRUE)
+zones_test <- zones
+zones_test[zones_test != 1] <- NA
+plot(zones_test, col = "red")
+zonal(
+  resample(
+    project(
+      mask_soil_uniform, zones), 
+    zones, method="bilinear"), 
+ zones, fun = "sum", na.rm = TRUE)[,2] %>% 
+  replace_na(0)
+```
+
+# Add two additional variables, then run random Forest again
+```{r ROE from soil model}
+#num key
+soil_key <- read_csv("HPU_num_key.csv")
+
+#https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
+soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
+crop_soil <- crop(soil, w3_outline)
+mask_soil <- mask(crop_soil, w3_outline)
+plot(mask_soil) #currently in NAD83
+
+# remove all values that are not ROE
+# 2 = Bhs, 4 = E, 7 = 0
+mask_soil[mask_soil == 1] <- NA
+mask_soil[mask_soil == 3] <- NA
+mask_soil[mask_soil == 8] <- NA
+mask_soil[mask_soil == 5] <- NA
+plot(mask_soil)
+
+# use raster algebra to set all values equal to 1, use in RF as sum
+mask_soil_uniform <- (mask_soil * 0) + 1
+plot(mask_soil_uniform)
+```
 ```{r prepare-RF-inputs}
+# uaab from JP
+uaab <- (rast("uaab_norm2_SHRINKED.tif"))
+
+crop_uaab <- crop(uaab, w3_outline)
+mask_uaab <- mask(crop_uaab, w3_outline)
+plot(mask_uaab)
 # come up with a set of functions to extract relevant topography and subsurface neighborhoods
 # dem_locations
 plot(rast(dem1_location))
@@ -3192,102 +3247,102 @@ point_values_comb <- point_values %>%
   
 ### extract by neighborhoods ####
 # create different sized buffers around points, then conduct zonal on them
-buffer1 <- terra::buffer(w3_stic_locs_r, width = 1)
+#buffer1 <- terra::buffer(w3_stic_locs_r, width = 1)
 buffer10 <- terra::buffer(w3_stic_locs_r, width = 10)
 buffer20 <- terra::buffer(w3_stic_locs_r, width = 20)
 buffer100 <- terra::buffer(w3_stic_locs_r, width = 100)
 
-buffed_1m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
-  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-        rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth3m" = "var1.pred_var1.pred"), 
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth1m" = "var1.pred_var1.pred"),
-rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
-                "total_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth3m" = "var1.pred_var1.pred"),
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred"),
-#add two new variables
-zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
-zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
-zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
-
-         ) %>% 
-  as_tibble()
+# buffed_1m <- bind_cols( 
+#   # zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+#   # zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+#   #        zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+#          # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
+#          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
+# #         dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "mean_depth10m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "mean_depth5m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "mean_depth3m" = "var1.pred_var1.pred"), 
+# dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth1m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+# #                 "total_depth10m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "total_depth5m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "total_depth3m" = "var1.pred_var1.pred"),
+# # dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+# #                 "total_depth1m" = "var1.pred_var1.pred"),
+# #add two new variables
+# zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
+# zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+# zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
+# 
+#          ) %>% 
+#   as_tibble()
 
 buffer1 <- buffer10
 buffed_10m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
-  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+  # zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  # zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+  #        zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-         rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth3m" = "var1.pred_var1.pred"), 
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+#          dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth3m" = "var1.pred_var1.pred"), 
+dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth1m" = "var1.pred_var1.pred"),
-rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
-                "total_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth3m" = "var1.pred_var1.pred"),
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+#                 "total_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth3m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
 zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
@@ -3297,46 +3352,46 @@ zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
 
 buffer1 <- buffer20
 buffed_20m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
-  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+  # zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  # zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+  #        zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-         rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+        dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth3m" = "var1.pred_var1.pred"), 
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth1m" = "var1.pred_var1.pred"),
-rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
-                "total_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth3m" = "var1.pred_var1.pred"),
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+#                 "total_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth3m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
 zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
@@ -3346,54 +3401,53 @@ zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
 
 buffer1 <- buffer100
 buffed_100m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
-  zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
+  # zonal(rast(flowacc10_output), buffer1, fun = "mean", na.rm = TRUE), 
+  # zonal(rast(flowacc5_output), buffer1, fun = "mean", na.rm = TRUE),
+  #        zonal(rast(flowacc3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(flowacc1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(slope3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(slope1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(tpi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(tpi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi10_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi5_output), buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(rast(twi3_output), buffer1, fun = "mean", na.rm = TRUE),
          zonal(rast(twi1_output), buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
-         zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve10_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve5_prof, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_plan, buffer1, fun = "mean", na.rm = TRUE),
+         # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth3m" = "var1.pred_var1.pred"), 
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth1m" = "var1.pred_var1.pred"),
-rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
-                "total_depth10m" = "var1.pred_var1.pred"),
-rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth5m" = "var1.pred_var1.pred"),
-rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth3m" = "var1.pred_var1.pred"),
-rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
-                "total_depth1m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
+#                 "total_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth3m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
+#                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
 zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
 zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
-buffed_1m_comb <- buffed_1m %>%
-  rename_with(~ paste0("nb1m_", .x))
+
 buffed_10m_comb <- buffed_10m %>%
   rename_with(~ paste0("nb10m_", .x))
 buffed_20m_comb <- buffed_20m %>%
@@ -3403,7 +3457,7 @@ buffed_100m_comb <- buffed_100m %>%
 
 #still need to combine all of these
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb) %>% 
-  select(-point_valuesID, -point_valueswshed)
+  dplyr::select(-point_valuesID, -point_valueswshed)
 ### extract by watersheds ####
 zones <- rast(w3_surface_sheds)
 plot(zones)
@@ -3413,90 +3467,90 @@ dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
 z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
 
 wshed_zones <- tibble(
-  slope10m_wshed = zonal(resample(project(rast(slope10_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  slope5m_wshed = zonal(resample(project(rast(slope5_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  slope3m_wshed = zonal(resample(project(rast(slope3_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
+  # slope10m_wshed = zonal(resample(project(rast(slope10_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # slope5m_wshed = zonal(resample(project(rast(slope5_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # slope3m_wshed = zonal(resample(project(rast(slope3_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
   slope1m_wshed = zonal(resample(project(rast(slope1_output)
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
-  tpi10m_wshed = zonal(resample(project(rast(tpi10_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  tpi5m_wshed = zonal(resample(project(rast(tpi5_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  tpi3m_wshed = zonal(resample(project(rast(tpi3_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
+  # tpi10m_wshed = zonal(resample(project(rast(tpi10_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # tpi5m_wshed = zonal(resample(project(rast(tpi5_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # tpi3m_wshed = zonal(resample(project(rast(tpi3_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
   tpi1m_wshed = zonal(resample(project(rast(tpi1_output)
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
-  twi10m_wshed = zonal(resample(project(rast(twi10_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  twi5m_wshed = zonal(resample(project(rast(twi5_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  twi3m_wshed = zonal(resample(project(rast(twi3_output)
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
+  # twi10m_wshed = zonal(resample(project(rast(twi10_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # twi5m_wshed = zonal(resample(project(rast(twi5_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # twi3m_wshed = zonal(resample(project(rast(twi3_output)
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
   twi1m_wshed = zonal(resample(project(rast(twi1_output)
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
-  curve10mplan_wshed = zonal(resample(project(curve10_plan
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  curve10mprof_wshed = zonal(resample(project(curve10_prof
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  curve5mplan_wshed = zonal(resample(project(curve5_plan
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  curve5mprof_wshed = zonal(resample(project(curve5_prof
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  curve3mplan_wshed = zonal(resample(project(curve3_plan
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  curve3mprof_wshed = zonal(resample(project(curve3_prof
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve10mplan_wshed = zonal(resample(project(curve10_plan
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve10mprof_wshed = zonal(resample(project(curve10_prof
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve5mplan_wshed = zonal(resample(project(curve5_plan
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve5mprof_wshed = zonal(resample(project(curve5_prof
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve3mplan_wshed = zonal(resample(project(curve3_plan
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # curve3mprof_wshed = zonal(resample(project(curve3_prof
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
   curve1mplan_wshed = zonal(resample(project(curve1_plan
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
   curve1mprof_wshed = zonal(resample(project(curve1_prof
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
-  avgdepth10m_wshed = zonal(resample(project(depth10
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  avgdepth5m_wshed = zonal(resample(project(depth5
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
-  avgdepth3m_wshed = zonal(resample(project(depth3
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "mean", na.rm = TRUE)[,2],
+  # avgdepth10m_wshed = zonal(resample(project(depth10
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # avgdepth5m_wshed = zonal(resample(project(depth5
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
+  # avgdepth3m_wshed = zonal(resample(project(depth3
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "mean", na.rm = TRUE)[,2],
   avgdepth1m_wshed = zonal(resample(project(depth1
                                  , zones), zones, method="bilinear"), 
                 zones, fun = "mean", na.rm = TRUE)[,2],
-  totaldepth10m_wshed = zonal(resample(project(depth10
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "sum", na.rm = TRUE)[,2],
-  totaldepth5m_wshed = zonal(resample(project(depth5
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "sum", na.rm = TRUE)[,2],
-  totaldepth3m_wshed = zonal(resample(project(depth3
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "sum", na.rm = TRUE)[,2],
-  totaldepth1m_wshed = zonal(resample(project(depth1
-                                 , zones), zones, method="bilinear"), 
-                zones, fun = "sum", na.rm = TRUE)[,2],
+  # totaldepth10m_wshed = zonal(resample(project(depth10
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "sum", na.rm = TRUE)[,2],
+  # totaldepth5m_wshed = zonal(resample(project(depth5
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "sum", na.rm = TRUE)[,2],
+  # totaldepth3m_wshed = zonal(resample(project(depth3
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "sum", na.rm = TRUE)[,2],
+  # totaldepth1m_wshed = zonal(resample(project(depth1
+  #                                , zones), zones, method="bilinear"), 
+  #               zones, fun = "sum", na.rm = TRUE)[,2],
   #add two new variables
   meanuaab_wshed = zonal(resample(project(mask_uaab
                                  , zones), zones, method="bilinear"), 
@@ -3511,9 +3565,9 @@ wshed_zones <- tibble(
 )
 
 all <- bind_cols(point_values_comb, wshed_zones) %>% 
-  select(-point_valuesID, -point_valueswshed)
+  dplyr::select(-point_valuesID, -point_valueswshed)
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
-  select(-point_valuesID, -point_valueswshed)
+  dplyr::select(-point_valuesID, -point_valueswshed)
 ### extract by neighbors in watersheds ####
 #creating zone in shed function
 # input_dataset <- depth10
@@ -3558,13 +3612,13 @@ zone_in_shed(
 
 
 buffer1 <- terra::buffer(vect("mod_bed_points.shp"), width = 1) %>% 
-  mutate(ID = FID + 1)
+  tidyterra::mutate(ID = FID + 1)
 buffer10 <- terra::buffer(vect("mod_bed_points.shp"), width = 10) %>% 
-  mutate(ID = FID + 1)
+  tidyterra::mutate(ID = FID + 1)
 buffer20 <- terra::buffer(vect("mod_bed_points.shp"), width = 20) %>% 
-  mutate(ID = FID + 1)
+  tidyterra::mutate(ID = FID + 1)
 buffer100 <- terra::buffer(vect("mod_bed_points.shp"), width = 100) %>% 
-  mutate(ID = FID + 1)
+  tidyterra::mutate(ID = FID + 1)
 
 #### Buffer 1 ####
 Sys.time()
@@ -3704,25 +3758,31 @@ wsnb100 <-
     full_join(zone_in_shed(depth1, buffer100, "wsnb100_depth1")) %>% 
   #add two new variables
     full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
-    full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE")
+    full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE") 
+                
 
 )
 #### ####
-all_wsnb <- wsnb10 %>% 
+#wsnb10[is.na(wsnb10)] <- 0
+
+all_wsnb <- 
+  wsnb10 %>% 
   full_join(wsnb20) %>% 
   full_join(wsnb100) %>% 
-  dplyr::select(-ID) %>% 
-  dplyr::select(-wsnb1_ROE) %>% 
-  dplyr::select(-wsnb1_uaab)
+  dplyr::select(-ID) #%>% 
+  #dplyr::select(-wsnb1_ROE) %>% 
+  #dplyr::select(-wsnb1_uaab)
 all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
   dplyr::select(-point_valueswshed) 
 
+all_zeros <- all
+all_zeros[is.na(all_zeros)] <- 0
 all <- bind_cols(all, all_wsnb) %>% 
-  select(where(~!any(is.na(.))))
+  dplyr::select(where(~!any(is.na(.))))
   #drop_na()
 #check for NAs
-View(all[!complete.cases(all), ])
-na_counts <- colSums(is.na(all))
+View(all_zeros[!complete.cases(all_zeros), ])
+na_counts <- colSums(is.na(all_zeros))
 
 names(na_counts[na_counts > 0])
 
@@ -3736,7 +3796,26 @@ names(na_counts[na_counts > 0])
 # immediate area
 ```
 
-## Add new datasets
+After calcing all of these co-variates, do some pre-processing
+```{r}
+cor_mat <- cor(all_zeros %>% dplyr::select(-point_valuespk), use = "complete.obs")
+
+high_cor <- findCorrelation(cor_mat, cutoff = 0.8, names = TRUE)
+
+low_cor <- all_zeros %>% dplyr::select(-high_cor)
+
+# also try RF using just different depth metrics?
+depths_hehe <- all_zeros %>% 
+  dplyr::select(point_valuespk, contains("depth"),
+                contains("soil"),
+                contains("uaab"),
+                contains("ROE"))
+
+low_cor %>% 
+  ggplot(aes(x = nb1m_catcharea_br_SHRINKED...41, y = point_valuesX1mdem_flowacc))+
+  geom_point()
+```
+
 JP and Kevin think I should also test drainage area weighted by bedrock, and ROE from soil model.
 
 Other things to try: 
@@ -3776,10 +3855,89 @@ group_by(names) %>%
 
 # New clean run through of whole RF routine
 1/27/26- getting ready for final iteration
-```{r RF-analysis-template}
 
+Testing something
+```{r VSURF aggregate runs all variables}
+# try running vsurf many times, finding most consistent predictors
+n_runs <- 10
+results <- vector("list", n_runs)
+
+all_df <- as.data.frame(low_cor) %>% 
+  dplyr::select(-point_valuesID)
+
+# VSURF routine
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
+
+for(i in 1:n_runs){
+  set.seed(1000 + i)
+  
+  results[[i]] <- VSURF(x = iris.learn$training, 
+                    y = iris.learn$pk, 
+                    na.action = na.omit,
+                    parallel = TRUE, 
+                    ncores = 3, clusterType = "FORK", ntree = 5000)
+
+}
+
+
+selected <- lapply(results, function(res)
+  colnames(iris.learn$training)[res$varselect.interp]
+)
+
+all_vars <- colnames(iris.learn$training)
+
+freq <- table(unlist(selected)) / n_runs
+
+freq <- sort(freq, decreasing = TRUE)
+freq
+topography_selected <- freq
+```
+```{r VSURF aggregate runs depth}
+# try running vsurf many times, finding most consistent predictors
+n_runs <- 10
+results <- vector("list", n_runs)
+
+all_df <- as.data.frame(low_cor) 
+
+# VSURF routine
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
+
+for(i in 1:n_runs){
+  set.seed(1000 + i)
+  
+  results[[i]] <- VSURF(x = iris.learn$training, 
+                    y = iris.learn$pk, 
+                    na.action = na.omit,
+                    parallel = TRUE, 
+                    ncores = 3, clusterType = "FORK", ntree = 5000)
+
+}
+
+
+selected <- lapply(results, function(res)
+  colnames(iris.learn$training)[res$varselect.interp]
+)
+
+all_vars <- colnames(iris.learn$training)
+
+freq <- table(unlist(selected)) / n_runs
+
+freq <- sort(freq, decreasing = TRUE)
+depth_selected2 <- freq #with variable preprocessing
+depth_selected2
+depth_selected # orginal
+```
+
+
+Final, formatted chunk that works! Do not fiddle
+```{r RF-analysis-template}
+set.seed(2)
 #remove ID column
-all_df <- as.data.frame(all) %>% 
+all_df <- as.data.frame(depths_hehe) #%>% 
   dplyr::select(-point_valuesID)
 
 #check for NAs. All 3 checks should return something empty
@@ -3796,7 +3954,7 @@ iris.vsurf <- VSURF(x = iris.learn$training,
                     y = iris.learn$pk, 
                     na.action = na.omit,
                     parallel = TRUE, 
-                    ncores = 3, clusterType = "FORK", ntree = 50000)
+                    ncores = 3, clusterType = "FORK", ntree = 100000)
 plot(iris.vsurf)
 colnames(iris.learn$training[iris.vsurf$varselect.interp])
 colnames(iris.learn$training[iris.vsurf$varselect.pred])
@@ -3808,10 +3966,12 @@ tibble(iris.predictions, "actual" = iris.learn$pk) %>%
   mutate(diff = actual - iris.predictions) %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
 
+
+
 # subset after VSURF selection routine
 chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
-chosen_df <- all %>% 
+chosen_df <- all_df %>% 
   dplyr::select(point_valuespk, chosen_vars)
 
 # Run normal RF and output OOB error, number of variables
@@ -3819,7 +3979,7 @@ RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit,
 RFDef
 plot(RFDef)
 
-varImpPlot(RFDef, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
+varImpPlot(RFDef, type = 1, scale = TRUE, cex = 0.8, main = "Variable importance")
 
 #plot of partial dependence
 imp <- importance(RFDef)
@@ -3872,7 +4032,7 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method
 
 baseflow_pk
 
-all_bflow <- all %>% rename(ID = point_valuesID) %>% 
+all_bflow <- all_zeros %>% dplyr::rename(ID = point_valuesID) %>% 
   inner_join(baseflow_pk) %>% 
     dplyr::select(-ID, -point_valuespk) %>% 
   relocate(baseflow_pk)
@@ -3967,79 +4127,7 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[3], chosen_vars[4]), method
   scale_fill_viridis_c()
 ```
 
-# Add two additional variables, then run random Forest again
-```{r ROE from soil model}
-#num key
-soil_key <- read_csv("HPU_num_key.csv")
 
-#https://portal.edirepository.org/nis/mapbrowse?packageid=knb-lter-hbr.380.2
-soil <- terra::rast("https://pasta.lternet.edu/package/data/eml/knb-lter-hbr/380/2/f083871fa0116b17b7398ca48eac7627")
-crop_soil <- crop(soil, w3_outline)
-mask_soil <- mask(crop_soil, w3_outline)
-plot(mask_soil) #currently in NAD83
-
-# remove all values that are not ROE
-# 2 = Bhs, 4 = E, 7 = 0
-mask_soil[mask_soil == 1] <- NA
-mask_soil[mask_soil == 3] <- NA
-mask_soil[mask_soil == 8] <- NA
-mask_soil[mask_soil == 5] <- NA
-plot(mask_soil)
-
-# use raster algebra to set all values equal to 1, use in RF as sum
-mask_soil_uniform <- (mask_soil * 0) + 1
-plot(mask_soil_uniform)
-```
-```{r Bedrock weighted area}
-#raster of BOSS output, downloaded from google drive of lat weathering project
-library(qgisprocess)
-library(RSAGA)
-options(qgisprocess.path = "/Applications/QGIS.app/Contents/MacOS/qgis_process")
-qgis_configure()
-
-
-# install.packages("RSAGA", dependencies = TRUE)
-# install.packages("qgisprocess")
-library(qgisprocess)
-plot(rast("bdr100k.tif"))
-
-out_dir <- "./bedrock/"
-
-dem <- rast(fill5_output)
-weights <- rast("bdr100k.tif")
-
-qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
-                   FLOW_UNIT = 0,
-                   ELEVATION = dem,
-                   METHOD = 3,
-                   NO_NEGATIVES = 1,
-                   ACCU_TARGET = dem,
-                   FLOW = paste0(out_dir, "catcharea")
-)
-
-catcharea <- rast(paste0(out_dir, "catcharea.sdat"))
-crs(catcharea) <- epsg_orig
-writeRaster(catcharea, paste0(out_dir, "catcharea.tif"), overwrite = TRUE)
-
-#weighted
-#qgis_show_help("saga:catchmentarearecursive")
-qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
-                   ELEVATION = dem,
-                   FLOW_UNIT = 0,
-                   METHOD = 3,
-                   WEIGHTS = weights,
-                   NO_NEGATIVES = 1,
-                   ACCU_TARGET = dem,
-                   FLOW = paste0(out_dir, "catcharea_br")
-)
-
-plot(rast("uaab_norm2_SHRINKED.tif"))
-uaab <- (rast("uaab_norm2_SHRINKED.tif"))
-
-crop_uaab <- crop(uaab, w3_outline)
-mask_uaab <- mask(crop_uaab, w3_outline)
-plot(mask_uaab)
-```
 
 
 
@@ -4605,6 +4693,51 @@ no_crazys$class <- clusters$cluster
 ```
 
 # DEPREC
+```{r AGU-talk-just-seismic}
+
+## Plot of just seismic for AGU25 poster
+seis_alone <- seis %>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(mean_depth = mean(depth), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) %>% 
+  rename(depth = mean_depth) %>% 
+  mutate(source = "seismic")
+
+ggplot()+
+  theme_void()+
+  # geom_spatraster(data = rast(hillshade_location))+
+  # #theme(legend.position = "")+
+  # scale_fill_gradientn(colors = c("gray9", "gray48","lightgray", "white"),
+  #                      na.value = "transparent",
+  #                      guide = "none")+
+  #   new_scale_fill() +
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = depth), size = 2, pch = 21) +
+  
+  # scale_fill_viridis_c(option = "magma",#high = "#27408B", low = "white",
+  #                     name = "Depth (m)")+
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "Depth (m)")+
+  #facet_wrap(~source, ncol= 4)+
+  theme_classic()+
+  #geom_sf(data = w3_pour, colour = "black") +
+   #scale_fill_hypso_c(palette = "dem_screen" , limits = c(200, 1000))+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+```
+
 ```{r orginal krig chunk}
 # # chunk that will run the variogram calculation and run kriging model
 # 
@@ -5244,3 +5377,331 @@ varImpPlot(RFDefImp, type = 1, scale = TRUE, n.var = 10, cex = 0.8, main = "Vari
 data("toys")
 ```
 
+
+# Monte Carlo experiments
+## Enter the casino
+GPT error propagation method
+```{r}
+# train power law model
+# first, remove everything with sd greater than 1/2 measurement, causing problems later on
+train <- cali
+fit <- lm(log(depth) ~ log(freq), data = train)
+summary(fit)
+
+beta_hat <- coef(fit)        # coefficients
+V_beta   <- vcov(fit)        # covariance matrix
+sigma_res <- sigma(fit)      # residual SD
+
+
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < h_v_max/2) %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+#newdata$freq
+#newdata$freq_sd
+
+nsim <- 5000   # usually 2000–10000 is good
+
+beta_sim <- mvrnorm(nsim, beta_hat, V_beta)
+
+simulate_depth <- function(freq, freq_sd) {
+
+  # 1. simulate true frequencies
+  freq_sim <- rnorm(nsim, mean = freq, sd = freq_sd)
+
+  # avoid impossible values
+  freq_sim[freq_sim <= 0] <- NA
+
+  log_freq_sim <- log(freq_sim)
+
+  # 2. regression prediction
+  log_depth_sim <-
+    beta_sim[,1] +
+    beta_sim[,2] * log_freq_sim
+
+  # 3. add residual variability (optional but recommended)
+  log_depth_sim <-
+    log_depth_sim + rnorm(nsim, 0, sigma_res)
+
+  # 4. convert back to depth
+  depth_sim <- exp(log_depth_sim)
+
+  depth_sim
+}
+
+results <- lapply(
+  seq_len(nrow(newdata)),
+  function(i)
+    simulate_depth(
+      newdata$freq[i],
+      newdata$freq_sd[i]
+    )
+)
+
+
+
+newdata$depth_mean <- sapply(results, mean, na.rm=TRUE)
+newdata$depth_sd   <- sapply(results, sd, na.rm=TRUE)
+newdata$depth_cv <- newdata$depth_sd / newdata$depth_mean
+
+newdata$depth_p025  <- sapply(results, quantile, 0.025, na.rm=TRUE)
+newdata$depth_p50  <- sapply(results, quantile, 0.50, na.rm=TRUE) # same thing as median
+newdata$depth_p975  <- sapply(results, quantile, 0.975, na.rm=TRUE)
+head(newdata)
+summary(newdata)
+hist(results[[5]], breaks = 50,
+     main = "Depth uncertainty distribution",
+     xlab = "Depth")
+
+
+no_crazys <- newdata %>% 
+  filter(depth_sd <= 5)
+hist(no_crazys$depth_p50)
+summary(no_crazys)
+newdata %>% 
+  filter(depth_sd >= 5)
+
+```
+Second attempt
+```{r}
+# Assume you have calibration data:
+# f0_calib (Hz), H_calib (m)
+train <- cali
+fit <- lm(log(depth) ~ log(freq), data = train)
+
+df <- data.frame(
+  logf0 = log(cali$freq),
+  logH  = log(cali$depth)
+)
+
+fit <- lm(logH ~ logf0, data = df)
+
+# Extract parameters
+theta_hat <- coef(fit)              # (alpha, beta)
+Sigma_theta <- vcov(fit)            # covariance matrix
+sigma_reg <- summary(fit)$sigma     # residual std dev
+
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < h_v_max/2) %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+
+newdata <- 
+  seis_f0 %>% 
+  filter(sd < 2) %>% 
+  rename(freq = "h_v_max",
+         freq_sd = "sd")
+
+mc_depth <- function(f0_mean, f0_sd, n = 10000,
+                     theta_hat, Sigma_theta, sigma_reg) {
+
+  # Convert to log space
+  mu_logf0 <- log(f0_mean)
+  sd_logf0 <- f0_sd / f0_mean   # delta-method approximation
+
+  # Sample f0 uncertainty
+  logf0_sim <- rnorm(n, mu_logf0, sd_logf0)
+
+  # Sample regression parameters
+  theta_sim <- mvrnorm(n, mu = theta_hat, Sigma = Sigma_theta)
+  alpha_sim <- theta_sim[,1]
+  beta_sim  <- theta_sim[,2]
+
+  # Sample residual noise
+  eps_sim <- rnorm(n, 0, sigma_reg)
+
+  # Compute log depth
+  logH_sim <- alpha_sim + beta_sim * logf0_sim + eps_sim
+
+  # Convert back
+  H_sim <- exp(logH_sim)
+
+  return(H_sim)
+}
+
+
+# Example vectors
+f0_mean_vec <- newdata$freq   # mean f0 per site
+f0_sd_vec   <- newdata$freq_sd   # sd of f0 per site
+
+results <- lapply(seq_along(f0_mean_vec), function(i) {
+  H_sim <- mc_depth(
+    f0_mean = f0_mean_vec[i],
+    f0_sd   = f0_sd_vec[i],
+    n = 10000,
+    theta_hat = theta_hat,
+    Sigma_theta = Sigma_theta,
+    sigma_reg = sigma_reg
+  )
+
+  c(
+    median = median(H_sim),
+    mean   = mean(H_sim),
+    sd     = sd(H_sim),
+    p16    = quantile(H_sim, 0.16),
+    p84    = quantile(H_sim, 0.84),
+    p2.5   = quantile(H_sim, 0.025),
+    p97.5  = quantile(H_sim, 0.975)
+  )
+})
+
+results_df <- do.call(bind_rows, results) %>% tibble()
+results_df
+mc_list  # list of numeric vectors (each = H_sim for a site)
+length(mc_list) == number_of_sites
+
+# depth probability density
+df_plot <- data.frame(H = results_df)
+ggplot(df_plot, aes(x = H)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 bins = 80,
+                 fill = "grey70",
+                 color = "black",
+                 linewidth = 0.2) +
+  geom_density(linewidth = 1) +
+  geom_vline(xintercept = median(H_sim),
+             linetype = "dashed",
+             linewidth = 1) +
+  labs(
+    x = "Depth to Bedrock (m)",
+    y = "Probability Density"
+  ) +
+  theme_classic(base_size = 13)
+
+results_df$site <- seq_len(nrow(results_df))
+
+ggplot(results_df,
+       aes(x = site, y = median)) +
+
+  geom_ribbon(aes(ymin = p2.5, ymax = p97.5),
+              fill = "grey85") +
+
+  geom_ribbon(aes(ymin = p16, ymax = p84),
+              fill = "grey65") +
+
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+
+  labs(
+    x = "HVSR Site",
+    y = "Depth to Bedrock (m)"
+  ) +
+  theme_classic(base_size = 13)
+```
+```{r depth and sd}
+
+## Plot of just seismic for AGU25 poster
+seis_alone <- 
+  seis_f0 %>% 
+  filter(grilla_number == 20) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) 
+  #group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(h_v_mean = mean(h_v_max), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1)
+
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone, aes(fill = h_v_max), size = 2, pch = 21) +
+  scale_fill_continuous(high = "purple4", low = "white",
+                      name = "F0 (m/s)")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+
+#seis_alone_sd <- 
+  seis_f0 %>% 
+  filter(sd < 2 * h_v_max) #%>% 
+group_by(lat, long) %>%       
+  #remove duplicate locations by taking the mean
+  summarise(sd_mean = mean(sd), n_coords = n()) %>% # n() is for looking duplicate number
+  arrange(desc(n_coords)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4329) %>% 
+  st_transform(crs1) 
+ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = seis_alone_sd, aes(fill = sd_mean), size = 2, pch = 21) +
+  scale_fill_continuous(high = "red4", low = "white",
+                      name = "sd")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "left")
+ggsave("w3_map_dpeth.png" )
+```
+
+Copy and pasted from JP's github repo
+```{r Bedrock weighted area}
+#raster of BOSS output, downloaded from google drive of lat weathering project
+library(qgisprocess)
+library(RSAGA)
+options(qgisprocess.path = "/Applications/QGIS.app/Contents/MacOS/qgis_process")
+qgis_configure()
+
+
+# install.packages("RSAGA", dependencies = TRUE)
+# install.packages("qgisprocess")
+library(qgisprocess)
+plot(rast("bdr100k.tif"))
+
+out_dir <- "./bedrock/"
+
+dem <- rast(fill5_output)
+weights <- rast("bdr100k.tif")
+
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                   FLOW_UNIT = 0,
+                   ELEVATION = dem,
+                   METHOD = 3,
+                   NO_NEGATIVES = 1,
+                   ACCU_TARGET = dem,
+                   FLOW = paste0(out_dir, "catcharea")
+)
+
+catcharea <- rast(paste0(out_dir, "catcharea.sdat"))
+crs(catcharea) <- epsg_orig
+writeRaster(catcharea, paste0(out_dir, "catcharea.tif"), overwrite = TRUE)
+
+#weighted
+#qgis_show_help("saga:catchmentarearecursive")
+qgis_run_algorithm(algorithm = "sagang:catchmentarearecursive",
+                   ELEVATION = dem,
+                   FLOW_UNIT = 0,
+                   METHOD = 3,
+                   WEIGHTS = weights,
+                   NO_NEGATIVES = 1,
+                   ACCU_TARGET = dem,
+                   FLOW = paste0(out_dir, "catcharea_br")
+)
+
+plot(rast("uaab_norm2_SHRINKED.tif"))
+uaab <- (rast("uaab_norm2_SHRINKED.tif"))
+
+crop_uaab <- crop(uaab, w3_outline)
+mask_uaab <- mask(crop_uaab, w3_outline)
+plot(mask_uaab)
+```
