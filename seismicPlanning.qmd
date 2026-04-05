@@ -553,7 +553,7 @@ for(i in 1:length(W3_IDs)){
   if(i > 1) all_out <- rbind(all_out, output)
 }
 #all_out <- filter(all_out, sd <= 2)
-pk_depth <- ggplot(all_out, aes(x = depth, y = pk, color = dist))+
+pk_depth <- ggplot(all_out, aes(x = depth, y = pk))+
   geom_errorbar(aes(xmin=mean_05, xmax=mean_95), width=.05, color = "grey") +
   geom_point()+
  #geom_smooth(method = 'lm')+
@@ -566,18 +566,13 @@ pk_depth <- ggplot(all_out, aes(x = depth, y = pk, color = dist))+
 lm(depth ~ pk, data = all_out) %>% summary()
 
 # also plot baseflow permanence
-egfege <- pks_w3 %>% mutate(
-totaldepth1m_wshed = zonal(resample(project(depth1
-                       , zones), zones, method="bilinear"), 
-      zones, fun = "sum", na.rm = TRUE)[,2]
-) %>% filter(ID %in% W3_IDs)
-#bpk_depth <- 
+
+bpk_depth <- 
   all_out %>% left_join(baseflow_pk) %>% 
-    
-  ggplot(aes(x = totaldepth1m_wshed, y = baseflow_pk, color = dist))+
+  ggplot(aes(x = depth, y = baseflow_pk))+
   geom_errorbar(aes(xmin=mean_05, xmax=mean_95), width=.05, color = "grey") +
   geom_point()+
- geom_smooth(method = 'lm')+
+ #geom_smooth(method = 'lm')+
    theme_classic()+
    #lims(x = c(0, 7))+
   labs(x = "Below-stream depth (m)",
@@ -3055,6 +3050,7 @@ plot(mask_soil)
 mask_soil_uniform <- (mask_soil * 0) + 1
 plot(mask_soil_uniform)
 ```
+Removed all total depths/volumes of storage, because they were too related to drainage area. 
 ```{r prepare-RF-inputs}
 # uaab from JP
 uaab <- (rast("uaab_norm2_SHRINKED.tif"))
@@ -3345,8 +3341,8 @@ dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
 #                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
-zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
-zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
+#zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+#zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
 
@@ -3376,12 +3372,12 @@ buffed_20m <- bind_cols(
          # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-        dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth10m" = "var1.pred_var1.pred"),
-dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth5m" = "var1.pred_var1.pred"),
-dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth3m" = "var1.pred_var1.pred"), 
+#         dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth3m" = "var1.pred_var1.pred"), 
 dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth1m" = "var1.pred_var1.pred"),
 # dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
@@ -3394,8 +3390,8 @@ dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
 #                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
-zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
-zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
+#zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+#zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
          ) %>% 
   as_tibble()
 
@@ -3425,12 +3421,12 @@ buffed_100m <- bind_cols(
          # zonal(curve3_prof, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_plan, buffer1, fun = "mean", na.rm = TRUE),
          zonal(curve1_prof, buffer1, fun = "mean", na.rm = TRUE),
-dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth10m" = "var1.pred_var1.pred"),
-dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth5m" = "var1.pred_var1.pred"),
-dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
-                "mean_depth3m" = "var1.pred_var1.pred"), 
+# dplyr::rename(zonal(depth10, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth10m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth5, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth5m" = "var1.pred_var1.pred"),
+# dplyr::rename(zonal(depth3, buffer1, fun = "mean", na.rm = TRUE),
+#                 "mean_depth3m" = "var1.pred_var1.pred"), 
 dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
                 "mean_depth1m" = "var1.pred_var1.pred"),
 # dplyr::rename(zonal(depth10, buffer1, fun = "sum", na.rm = TRUE),
@@ -3443,9 +3439,9 @@ dplyr::rename(zonal(depth1, buffer1, fun = "mean", na.rm = TRUE),
 #                 "total_depth1m" = "var1.pred_var1.pred"),
 #add two new variables
 zonal(mask_uaab, buffer1, fun = "mean", na.rm = TRUE),
-zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
-zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
-         ) %>% 
+#zonal(mask_uaab, buffer1, fun = "sum", na.rm = TRUE),
+#zonal(mask_soil_uniform, buffer1, fun = "sum", na.rm = TRUE)
+) %>% 
   as_tibble()
 
 buffed_10m_comb <- buffed_10m %>%
@@ -3456,7 +3452,7 @@ buffed_100m_comb <- buffed_100m %>%
   rename_with(~ paste0("nb100m_", .x))
 
 #still need to combine all of these
-all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb) %>% 
+all <- bind_cols(point_values_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb) %>% 
   dplyr::select(-point_valuesID, -point_valueswshed)
 ### extract by watersheds ####
 zones <- rast(w3_surface_sheds)
@@ -3566,7 +3562,7 @@ wshed_zones <- tibble(
 
 all <- bind_cols(point_values_comb, wshed_zones) %>% 
   dplyr::select(-point_valuesID, -point_valueswshed)
-all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
+all <- bind_cols(point_values_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
   dplyr::select(-point_valuesID, -point_valueswshed)
 ### extract by neighbors in watersheds ####
 #creating zone in shed function
@@ -3622,41 +3618,41 @@ buffer100 <- terra::buffer(vect("mod_bed_points.shp"), width = 100) %>%
 
 #### Buffer 1 ####
 Sys.time()
-wsnb1 <- 
-  full_join(
-      zone_in_shed(rast(flowacc10_output), buffer1, "wsnb1_flowacc10"),
-      zone_in_shed(rast(flowacc5_output), buffer1, "wsnb1_flowacc5")) %>% 
-    full_join(zone_in_shed(rast(flowacc3_output), buffer1, "wsnb1_flowacc3")) %>% 
-    full_join(zone_in_shed(rast(flowacc1_output), buffer1, "wsnb1_flowacc1")) %>%
-    full_join(zone_in_shed(rast(slope10_output), buffer1, "wsnb1_slope10")) %>%
-    full_join(zone_in_shed(rast(slope5_output), buffer1, "wsnb1_slope5")) %>%
-    full_join(zone_in_shed(rast(slope3_output), buffer1, "wsnb1_slope3")) %>%
-    full_join(zone_in_shed(rast(slope1_output), buffer1, "wsnb1_slope1")) %>%
-    full_join(zone_in_shed(rast(tpi10_output), buffer1, "wsnb1_tpi10")) %>%
-    full_join(zone_in_shed(rast(tpi5_output), buffer1, "wsnb1_tpi5")) %>%
-    full_join(zone_in_shed(rast(tpi3_output), buffer1, "wsnb1_tpi3")) %>%
-    full_join(zone_in_shed(rast(tpi1_output), buffer1, "wsnb1_tpi1")) %>%
-    full_join(zone_in_shed(rast(twi10_output), buffer1, "wsnb1_twi10")) %>%
-    full_join(zone_in_shed(rast(twi5_output), buffer1, "wsnb1_twi5")) %>%
-    full_join(zone_in_shed(rast(twi3_output), buffer1, "wsnb1_twi3")) %>%
-    full_join(zone_in_shed(rast(twi1_output), buffer1, "wsnb1_twi1")) %>%
-    full_join(zone_in_shed(curve10_plan, buffer1, "wsnb1_curve10_plan")) %>%
-    full_join(zone_in_shed(curve10_prof, buffer1, "wsnb1_curve10_prof")) %>%
-    full_join(zone_in_shed(curve5_plan, buffer1, "wsnb1_curve5_plan")) %>%
-    full_join(zone_in_shed(curve5_prof, buffer1, "wsnb1_curve5_prof")) %>%
-    full_join(zone_in_shed(curve3_plan, buffer1, "wsnb1_curve3_plan")) %>%
-    full_join(zone_in_shed(curve3_prof, buffer1, "wsnb1_curve3_prof")) %>%
-    full_join(zone_in_shed(curve1_plan, buffer1, "wsnb1_curve1_plan")) %>%
-    full_join(zone_in_shed(curve1_prof, buffer1, "wsnb1_curve1_prof")) %>%
-    full_join(zone_in_shed(depth10, buffer1, "wsnb1_depth10")) %>%
-    full_join(zone_in_shed(depth5, buffer1, "wsnb1_depth5")) %>%
-    full_join(zone_in_shed(depth3, buffer1, "wsnb1_depth3")) %>%
-    full_join(zone_in_shed(depth1, buffer1, "wsnb1_depth1")) #%>% 
+# wsnb1 <- 
+#   full_join(
+#       zone_in_shed(rast(flowacc10_output), buffer1, "wsnb1_flowacc10"),
+#       zone_in_shed(rast(flowacc5_output), buffer1, "wsnb1_flowacc5")) %>% 
+#     full_join(zone_in_shed(rast(flowacc3_output), buffer1, "wsnb1_flowacc3")) %>% 
+#     full_join(zone_in_shed(rast(flowacc1_output), buffer1, "wsnb1_flowacc1")) %>%
+#     full_join(zone_in_shed(rast(slope10_output), buffer1, "wsnb1_slope10")) %>%
+#     full_join(zone_in_shed(rast(slope5_output), buffer1, "wsnb1_slope5")) %>%
+#     full_join(zone_in_shed(rast(slope3_output), buffer1, "wsnb1_slope3")) %>%
+#     full_join(zone_in_shed(rast(slope1_output), buffer1, "wsnb1_slope1")) %>%
+#     full_join(zone_in_shed(rast(tpi10_output), buffer1, "wsnb1_tpi10")) %>%
+#     full_join(zone_in_shed(rast(tpi5_output), buffer1, "wsnb1_tpi5")) %>%
+#     full_join(zone_in_shed(rast(tpi3_output), buffer1, "wsnb1_tpi3")) %>%
+#     full_join(zone_in_shed(rast(tpi1_output), buffer1, "wsnb1_tpi1")) %>%
+#     full_join(zone_in_shed(rast(twi10_output), buffer1, "wsnb1_twi10")) %>%
+#     full_join(zone_in_shed(rast(twi5_output), buffer1, "wsnb1_twi5")) %>%
+#     full_join(zone_in_shed(rast(twi3_output), buffer1, "wsnb1_twi3")) %>%
+#     full_join(zone_in_shed(rast(twi1_output), buffer1, "wsnb1_twi1")) %>%
+#     full_join(zone_in_shed(curve10_plan, buffer1, "wsnb1_curve10_plan")) %>%
+#     full_join(zone_in_shed(curve10_prof, buffer1, "wsnb1_curve10_prof")) %>%
+#     full_join(zone_in_shed(curve5_plan, buffer1, "wsnb1_curve5_plan")) %>%
+#     full_join(zone_in_shed(curve5_prof, buffer1, "wsnb1_curve5_prof")) %>%
+#     full_join(zone_in_shed(curve3_plan, buffer1, "wsnb1_curve3_plan")) %>%
+#     full_join(zone_in_shed(curve3_prof, buffer1, "wsnb1_curve3_prof")) %>%
+#     full_join(zone_in_shed(curve1_plan, buffer1, "wsnb1_curve1_plan")) %>%
+#     full_join(zone_in_shed(curve1_prof, buffer1, "wsnb1_curve1_prof")) %>%
+#     full_join(zone_in_shed(depth10, buffer1, "wsnb1_depth10")) %>%
+#     full_join(zone_in_shed(depth5, buffer1, "wsnb1_depth5")) %>%
+#     full_join(zone_in_shed(depth3, buffer1, "wsnb1_depth3")) %>%
+#     full_join(zone_in_shed(depth1, buffer1, "wsnb1_depth1")) #%>% 
   #add two new variables
     # full_join(zone_in_shed(mask_uaab, buffer1, "wsnb1_uaab")) %>% 
     # full_join(zone_in_shed(mask_soil_uniform, buffer1, "wsnb1_ROE")
 
-)
+
 Sys.time()
 #### Buffer 10 ####
 wsnb10 <- 
@@ -3772,7 +3768,7 @@ all_wsnb <-
   dplyr::select(-ID) #%>% 
   #dplyr::select(-wsnb1_ROE) %>% 
   #dplyr::select(-wsnb1_uaab)
-all <- bind_cols(point_values_comb, buffed_1m_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
+all <- bind_cols(point_values_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
   dplyr::select(-point_valueswshed) 
 
 all_zeros <- all
@@ -3798,17 +3794,30 @@ names(na_counts[na_counts > 0])
 
 After calcing all of these co-variates, do some pre-processing
 ```{r}
-cor_mat <- cor(all_zeros %>% dplyr::select(-point_valuespk), use = "complete.obs")
+cor_mat <- cor(depths_hehe %>% dplyr::select(-point_valuespk), use = "complete.obs")
 
 high_cor <- findCorrelation(cor_mat, cutoff = 0.8, names = TRUE)
 
-low_cor <- all_zeros %>% dplyr::select(-high_cor)
+low_cor <- depths_hehe %>% dplyr::select(-high_cor)
 
 # also try RF using just different depth metrics?
 depths_hehe <- all_zeros %>% 
   dplyr::select(point_valuespk, contains("depth"),
+                "point_valuesvar1.pred_var1.pred...28",
+                "point_valuesvar1.pred_var1.pred...29",
+                "point_valuesvar1.pred_var1.pred...30",
+                "point_valuesvar1.pred_var1.pred...31",
+                #"point_valuescatcharea_br_SHRINKED",
+                #"nb10m_catcharea_br_SHRINKED...41",
+                #"nb10m_f083871fa0116b17b7398ca48eac7627",
+                #"nb20m_catcharea_br_SHRINKED...53",
+                #"nb20m_catcharea_br_SHRINKED...54",
+                #"nb20m_f083871fa0116b17b7398ca48eac7627",
+                #"nb100m_catcharea_br_SHRINKED...66",
+                #"nb100m_catcharea_br_SHRINKED...67",
+                #"nb100m_f083871fa0116b17b7398ca48eac7627",
                 contains("soil"),
-                contains("uaab"),
+                #contains("uaab"),
                 contains("ROE"))
 
 low_cor %>% 
@@ -3862,7 +3871,7 @@ Testing something
 n_runs <- 10
 results <- vector("list", n_runs)
 
-all_df <- as.data.frame(low_cor) %>% 
+all_df <- as.data.frame(all_zeros) %>% 
   dplyr::select(-point_valuesID)
 
 # VSURF routine
@@ -3892,6 +3901,7 @@ freq <- table(unlist(selected)) / n_runs
 
 freq <- sort(freq, decreasing = TRUE)
 freq
+topography_selected
 topography_selected <- freq
 ```
 ```{r VSURF aggregate runs depth}
@@ -3899,7 +3909,7 @@ topography_selected <- freq
 n_runs <- 10
 results <- vector("list", n_runs)
 
-all_df <- as.data.frame(low_cor) 
+all_df <- as.data.frame(depths_hehe) 
 
 # VSURF routine
 iris.learn <- list()
@@ -3931,7 +3941,9 @@ depth_selected2 <- freq #with variable preprocessing
 depth_selected2
 depth_selected # orginal
 ```
-
+ final RF parameters:
+ All_zeros: point_valuesX5mdem_slope    point_valuesX5mdem_twi point_valuesX10mdem_slope               tpi1m_wshed
+ just depth info: meanuaab_wshed  nb100m_mean_depth1m
 
 Final, formatted chunk that works! Do not fiddle
 ```{r RF-analysis-template}
@@ -4028,23 +4040,11 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
   scale_fill_viridis_c()
 ```
-```{r RF-analysis-baseflow-pk}
 
-baseflow_pk
-
-all_bflow <- all_zeros %>% dplyr::rename(ID = point_valuesID) %>% 
-  inner_join(baseflow_pk) %>% 
-    dplyr::select(-ID, -point_valuespk) %>% 
-  relocate(baseflow_pk)
-
-#check for NAs
-View(all_bflow[!complete.cases(all_bflow), ])
-na_counts <- colSums(is.na(all_bflow))
-names(na_counts[na_counts > 0])
-
+# Final whole RF, produce outputs for paper
+```{r RF just depths}
 #remove ID column
-all_df <- as.data.frame(all_bflow) #%>% 
-  #dplyr::select(-point_valuesID)
+all_df <- as.data.frame(depths_hehe) #%>% 
 
 # VSURF routine
 iris.learn <- list()
@@ -4053,9 +4053,103 @@ iris.learn$pk <- all_df[,1]
 
 iris.vsurf <- VSURF(x = iris.learn$training, 
                     y = iris.learn$pk, 
-                    na.action = na.omit)
+                    na.action = na.omit,
+                    parallel = TRUE, 
+                    ncores = 3, clusterType = "FORK", ntree = 100000)
 plot(iris.vsurf)
-#colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.interp])
+colnames(iris.learn$training[iris.vsurf$varselect.pred])
+
+
+iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "interp")
+#calculate RMSE
+tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) %>% 
+  summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+
+
+# subset after VSURF selection routine
+chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.interp])
+
+chosen_df <- all_df %>% 
+  dplyr::select(point_valuespk, chosen_vars)
+
+# Run normal RF and output OOB error, number of variables
+RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit, ntree = 5000, importance = TRUE)
+RFDef
+plot(RFDef)
+
+varImpPlot(RFDef, type = 1, scale = TRUE, cex = 0.8, main = "Variable importance")
+
+#plot of partial dependence
+imp <- importance(RFDef)
+impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
+#impvar1 <- impvar[1:10]
+#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
+axes_labels <- c("5 m slope",
+                 "10 m neighborhood flow acc.",
+                 "10 m slope",
+                 "100 m WS neighborhood plan curvature",
+                 "3 m slope")
+impvar <- impvar[1:4]
+op <- par(mfrow=c(1, length(impvar)))
+for (i in seq_along(impvar)) {
+    partialPlot(RFDef, as.data.frame(all_df), impvar[i],
+                #main=paste("Partial Dependence on", impvar1[i]),
+                main = "",
+                cex = 0.1,
+                rug = TRUE,
+                ylim = c(0.45, 0.65),
+                xlab = axes_labels[i])
+}
+par(op)
+
+
+
+
+# Plot residual plots
+plotres(RFDef, which = 3)
+plotres(RFDef, which = 4)
+
+
+#calculate individual ALE
+predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
+effs <- FeatureEffects$new(predictor, grid.size = 10)
+p1 <- effs$effects[["nb100m_mean_depth1m"]]$plot() + theme_classic() +
+  ylab(y = "ALE on flow persistence prediction")
+p2 <- effs$effects[["nb10m_mean_depth1m"]]$plot() + theme_classic()
+p3 <- effs$effects[["avgdepth1m_wshed"]]$plot() + theme_classic()
+p1 + p2+ p3
+
+pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
+
+# calculate 2nd order ALE
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c(name = str_wrap("2nd order Accumulated Local Effects", 15))+
+  theme_classic()
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()
+```
+```{r RF all variables}
+#remove ID column
+all_df <- as.data.frame(all_zeros) %>% 
+  dplyr::select(-point_valuesID)
+
+# VSURF routine
+iris.learn <- list()
+iris.learn$training <- all_df[,-1]
+iris.learn$pk <- all_df[,1]
+
+iris.vsurf <- VSURF(x = iris.learn$training, 
+                    y = iris.learn$pk, 
+                    na.action = na.omit,
+                    parallel = TRUE, 
+                    ncores = 3, clusterType = "FORK", ntree = 100000)
+plot(iris.vsurf)
+colnames(iris.learn$training[iris.vsurf$varselect.interp])
 colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
 
@@ -4065,44 +4159,23 @@ tibble(iris.predictions, "actual" = iris.learn$pk) %>%
   mutate(diff = actual - iris.predictions) %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
 
+
+
 # subset after VSURF selection routine
 chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
-chosen_df <- all %>% 
-  dplyr::select(c(point_valuespk, chosen_vars))
+chosen_df <- all_df %>% 
+  dplyr::select(point_valuespk, chosen_vars)
 
 # Run normal RF and output OOB error, number of variables
-RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit)
+RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit, ntree = 5000, importance = TRUE)
 RFDef
 plot(RFDef)
 
-
-RFDefImp <- randomForest(point_valuespk ~ ., data = chosen_df, importance = TRUE, na.action = na.omit)
-
-varImpPlot(RFDefImp, type = 1, scale = FALSE, cex = 0.8, main = "Variable importance")
-
-#plot of partial dependence
-imp <- importance(RFDefImp)
-impvar <- rownames(imp)[order(imp[, 1], decreasing=TRUE)]
-#impvar1 <- impvar[1:10]
-#impvar1 <- colnames(all[vsurfSpam$varselect.pred])
-
-op <- par(mfrow=c(1, length(chosen_vars)))
-for (i in seq_along(impvar)) {
-    partialPlot(RFDefImp, as.data.frame(all_df), impvar[i], xlab=impvar[i],
-                #main=paste("Partial Dependence on", impvar1[i]),
-                main = "",
-                cex = 0.1,
-                rug = TRUE,
-                ylim = c(0, 1))
-}
-par(op)
-
-
+varImpPlot(RFDef, type = 1, scale = TRUE, cex = 0.8, main = "Variable importance")
 
 
 # Plot residual plots
-# https://dataanalyticsbook.info/chapter-6.-diagnosis-residuals-heterogeneity.html
 plotres(RFDef, which = 3)
 plotres(RFDef, which = 4)
 
@@ -4110,20 +4183,23 @@ plotres(RFDef, which = 4)
 #calculate individual ALE
 predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
 effs <- FeatureEffects$new(predictor, grid.size = 10)
-plot(effs)
+plot(effs) + theme_classic()
+
+p1 <- effs$effects[["point_valuesX5mdem_slope"]]$plot() + theme_classic()
+p2 <- effs$effects[["point_valuesX10mdem_slope"]]$plot() + theme_classic() 
+p3 <- effs$effects[["point_valuesX5mdem_twi"]]$plot() + theme_classic()
+p4 <- effs$effects[["tpi1m_wshed"]]$plot() + theme_classic()
+p1 + p2+ p3 + p4
 
 pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
 
 # calculate 2nd order ALE
-# text book: https://christophm.github.io/interpretable-ml-book/ale.html
-# code : https://github.com/christophM/interpretable-ml-book/blob/master/manuscript/ale.qmd
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[2]), method = "ale", grid.size = 40)$plot()+
-  scale_fill_viridis_c()+
+  scale_fill_viridis_c(name = str_wrap("2nd order Accumulated Local Effects", 15))+
+  theme_classic()
+FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
+  scale_fill_viridis_c()+ 
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
-  scale_fill_viridis_c()+ 
-FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[4]), method = "ale", grid.size = 40)$plot()+
-  scale_fill_viridis_c()+ 
-FeatureEffect$new(pred.bike, feature = c(chosen_vars[3], chosen_vars[4]), method = "ale", grid.size = 40)$plot()+
   scale_fill_viridis_c()
 ```
 
@@ -4131,566 +4207,6 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[3], chosen_vars[4]), method
 
 
 
-# prediction of the whole network based on RF
-Predicting other watersheds and the whole of W3 will be a back up if topmodel doesn't end up working as we intend
-## Test on one tributary- W2
-```{r generate-points-along-network}
-equally_spaced_points <- st_sample(st_as_sf(W2), size = 100, type = "regular")
-plot(equally_spaced_points)
-# now all I have to do is extract values from the depth-DEM and I can plot again
-bedrock_topo <- rast(bedrock_topo_location)
-bedrock_surface <- terra::extract(bedrock_topo, vect(equally_spaced_points), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
-```
-
-Successfully used RF model on new obs! Who knows if they are accurate
-```{r RF-applied-one trib}
-# input points should be in form of spat vector, with EPSG:26919
-input_points <- as_tibble(st_coordinates(equally_spaced_points)) %>% 
-  mutate(ID = row_number()) %>% 
-  vect(geom = c("X", "Y"), crs = crs1) %>% 
-  dplyr::select(-L1)
-writeVector(input_points, "input_pts.shp", overwrite = TRUE)
-### Extracting point values ####
-extract(rast(flowacc10_output), 
-                  input_points, ID = FALSE, bind = TRUE)
-point_values <- 
-  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
-  as_tibble()
-point_values_comb <- point_values %>%
-  rename_with(~ paste0("point_values", .x))
-  
-### extract by neighborhoods ####
-# create different sized buffers around points, then conduct zonal on them
-buffer10 <- terra::buffer(input_points, width = 10)
-buffer100 <- terra::buffer(input_points, width = 100)
-
-buffed_10m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
-  as_tibble()
-
-buffed_10m_comb <- buffed_10m %>%
-  rename_with(~ paste0("nb10m_", .x))
-
-### extract by watersheds ####
-d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
-subsheds <- "subsheds2.tif"
-wbt_watershed(d8_pntr = flowdir_location,
-              pour_pts = "input_pts.shp",
-              output = subsheds)
-plot(rast(subsheds), col = my_colors)
-zones <- rast(subsheds)
-# Zonal function- take zonal statistics
-# evelation
-dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
-z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
-
- 
- 
-### extract by neighbors in watersheds SETUP ####
-# delineate watersheds for each point...
-
-#creating zone in shed function
-# input_dataset <- depth10
-buffer_dataset <- buffer10
-plot(buffer10)
-zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
-for(i in 1:length(buffer_dataset$ID)){
-#i <- 29
-#input_dataset <- rast(flowacc10_output)
-#buffer_dataset <- buffer1
-#col_name <- "wsnb100_depth10"
-  ID <- i
-  zones <- rast(subsheds)
-
-  zones[zones != ID] <- NA
-  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
-  plot(zones)
-  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
-  input_resamp  <- resample(project(input_dataset, zones_masked), 
-                            zones_masked, method="bilinear")
-  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
-  if(i == 1) alldat <- output
-  if(i > 1) alldat <- rbind(alldat, output)
-}
-  #alldat <- tibble(alldat[,2])
-  colnames(alldat) <- c("ID", col_name)
-  return(alldat)
-}
-
-
-#### Buffer 100 ####
-wsnb100 <- 
-  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
-    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
-    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
-#### Combine all ####
-
-all <-
-  bind_cols(
-    buffed_10m_comb,
-    wsnb100 %>% tibble() %>% dplyr::select(-ID),
-    point_values_comb %>% dplyr::select(-c(point_valuesL1, point_valuespoint_ID))
-  )
-
-
-#check for NAs
-View(all[!complete.cases(all), ])
-na_counts <- colSums(is.na(all))
-
-new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
-
-input_points$persistence <- new_predictions
-ggplot()+
-  geom_spatvector(data = input_points, aes(color = persistence))
-```
-## Apply to whole W3 network
-Now do for the whole network!
-```{r setup-W3}
-w3_regime
-equally_spaced_points <- st_sample(st_as_sf(w3_regime), size = 400, type = "regular")
-plot(equally_spaced_points)
-
-```
-```{r RF-applied-allW3}
-##### input points #####
-# input points should be in form of spat vector, with EPSG:26919
-input_points <- as_tibble(st_coordinates(equally_spaced_points)) %>% 
-  mutate(ID = row_number()) %>% 
-  vect(geom = c("X", "Y"), crs = crs1) %>% 
-  dplyr::select(-L1)
-writeVector(input_points, "input_pts.shp", overwrite = TRUE)
-### Extracting point values ####
-extract(rast(flowacc10_output), 
-                  input_points, ID = FALSE, bind = TRUE)
-point_values <- 
-  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
-  as_tibble()
-point_values_comb <- point_values %>%
-  rename_with(~ paste0("point_values", .x))
-  
-### extract by neighborhoods ####
-# create different sized buffers around points, then conduct zonal on them
-buffer10 <- terra::buffer(input_points, width = 10)
-buffer100 <- terra::buffer(input_points, width = 100)
-
-buffed_10m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
-  as_tibble()
-
-buffed_10m_comb <- buffed_10m %>%
-  rename_with(~ paste0("nb10m_", .x))
-
-### extract by watersheds ####
-d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
-subsheds <- "subsheds2.tif"
-wbt_watershed(d8_pntr = flowdir_location,
-              pour_pts = "input_pts.shp",
-              output = subsheds)
-plot(rast(subsheds), col = my_colors)
-zones <- rast(subsheds)
-# Zonal function- take zonal statistics
-# evelation
-dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
-z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
-
- 
- 
-### extract by neighbors in watersheds SETUP ####
-# delineate watersheds for each point...
-
-#creating zone in shed function
-# input_dataset <- depth10
-buffer_dataset <- buffer10
-plot(buffer10)
-zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
-for(i in 1:length(buffer_dataset$ID)){
-#i <- 29
-#input_dataset <- rast(flowacc10_output)
-#buffer_dataset <- buffer1
-#col_name <- "wsnb100_depth10"
-  ID <- i
-  zones <- rast(subsheds)
-
-  zones[zones != ID] <- NA
-  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
-  plot(zones)
-  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
-  input_resamp  <- resample(project(input_dataset, zones_masked), 
-                            zones_masked, method="bilinear")
-  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
-  if(i == 1) alldat <- output
-  if(i > 1) alldat <- rbind(alldat, output)
-}
-  #alldat <- tibble(alldat[,2])
-  colnames(alldat) <- c("ID", col_name)
-  return(alldat)
-}
-
-
-#### Buffer 100 ####
-wsnb100 <- 
-  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
-    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
-    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
-#### Combine all ####
-
-all <-
-  bind_cols(
-    buffed_10m_comb,
-    wsnb100 %>% tibble() %>% dplyr::select(-ID),
-    point_values_comb %>% dplyr::select(-point_valuesID)
-  )
-
-
-#check for NAs
-View(all[!complete.cases(all), ])
-na_counts <- colSums(is.na(all))
-
-new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
-
-input_points$persistence <- new_predictions
-ggplot()+
-  geom_spatvector(data = input_points, aes(color = persistence))+
-  scale_color_viridis_c(name = "Predicted Persistence")+
-  theme_void()
-```
-
-## Apply to other two watersheds
-In the original generation of all of the topo metrics to test, I make a bunch of different raster datasets. Will need to make them for other 2 watersheds.
-```{r generate-topo-files}
-# outline of shed
-fb_shed_location <- paste0(arsenal, "/fb_dems/fb_shed.tif")
-fb_outline <- as.polygons(rast(fb_shed_location), extent=FALSE)
-plot(fb_outline)
-
-##### Prepare DEMS #####
-dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
-dem1 <- rast(dem_location) %>% 
-  crop(fb_outline) %>% 
-  mask(fb_outline)
-dem3 <- aggregate(rast(dem_location), 3) %>% 
-  crop(fb_outline) %>% 
-  mask(fb_outline)
-dem5 <- aggregate(rast(dem_location), 5) %>% 
-  crop(fb_outline) %>% 
-  mask(fb_outline)
-dem10 <- aggregate(rast(dem_location), 10) %>% 
-  crop(fb_outline) %>% 
-  mask(fb_outline)
-
-#save raster, because whitebox wants it is a files location instead of an object in R
-dem1_location <- paste0(arsenal, "/fb_dems/1mdem.tif")
-dem3_location <- paste0(arsenal, "/fb_dems/3mdem.tif")
-dem5_location <- paste0(arsenal, "/fb_dems/5mdem.tif")
-dem10_location <- paste0(arsenal, "/fb_dems/10mdem.tif")
-
-writeRaster(dem1, dem1_location, overwrite = TRUE)
-writeRaster(dem3, dem3_location, overwrite = TRUE)
-writeRaster(dem5, dem5_location, overwrite = TRUE)
-writeRaster(dem10, dem10_location, overwrite = TRUE)
-
-##### STIC locations #####
-stic_locs_snap_location <- paste0(arsenal, "/fb_stic_locs.shp")
-pks_fb <- read_csv(paste0(arsenal, "/pks_fb.csv"))
-
-fb_stic_locs_r <- vect(stic_locs_snap_location)
-
-fb_stic_location <- "fb_stic_locs.shp"
-#writeVector(w3_stic_locs_r, w3_stic_location)
-# come up with a set of functions to extract relevant topography and subsurface neighborhoods
-# checking that DEMs are correct location, and different resolutions
-plot(rast(dem1_location))
-plot(rast(dem3_location))
-plot(rast(dem5_location))
-plot(rast(dem10_location))
-### fill DEMs #####
-fill1_output <- paste0(arsenal,"/fb_dems/1mdem_fill.tif")
-fill3_output <- paste0(arsenal,"/fb_dems/3mdem_fill.tif")
-fill5_output <- paste0(arsenal,"/fb_dems/5mdem_fill.tif")
-fill10_output <- paste0(arsenal,"/fb_dems/10mdem_fill.tif")
-
-wbt_fill_depressions_wang_and_liu(
-  dem = dem1_location,
-  output = fill1_output
-)
-wbt_fill_depressions_wang_and_liu(
-  dem = dem3_location,
-  output = fill3_output
-)
-wbt_fill_depressions_wang_and_liu(
-  dem = dem5_location,
-  output = fill5_output
-)
-wbt_fill_depressions_wang_and_liu(
-  dem = dem10_location,
-  output = fill10_output
-)
-### Drainage area ####
-flowacc1_output <- paste0(arsenal,"/fb_dems/1mdem_flowacc.tif")
-flowacc3_output <- paste0(arsenal,"/fb_dems/3mdem_flowacc.tif")
-flowacc5_output <- paste0(arsenal,"/fb_dems/5mdem_flowacc.tif")
-flowacc10_output <- paste0(arsenal,"/fb_dems/10mdem_flowacc.tif")
-wbt_d_inf_flow_accumulation(input = fill1_output,
-                            output = flowacc1_output,
-                            out_type = "Specific Contributing Area")
-wbt_d_inf_flow_accumulation(input = fill3_output,
-                            output = flowacc3_output,
-                            out_type = "Specific Contributing Area")
-wbt_d_inf_flow_accumulation(input = fill5_output,
-                            output = flowacc5_output,
-                            out_type = "Specific Contributing Area")
-wbt_d_inf_flow_accumulation(input = fill10_output,
-                            output = flowacc10_output,
-                            out_type = "Specific Contributing Area")
-### Slope ####
-slope1_output <- paste0(arsenal,"/fb_dems/1mdem_slope.tif")
-slope3_output <- paste0(arsenal,"/fb_dems/3mdem_slope.tif")
-slope5_output <- paste0(arsenal,"/fb_dems/5mdem_slope.tif")
-slope10_output <- paste0(arsenal,"/fb_dems/10mdem_slope.tif")
-
-wbt_slope(dem = fill1_output,
-          output = slope1_output,
-          units = "degrees")
-wbt_slope(dem = fill3_output,
-          output = slope3_output,
-          units = "degrees")
-wbt_slope(dem = fill5_output,
-          output = slope5_output,
-          units = "degrees")
-wbt_slope(dem = fill10_output,
-          output = slope10_output,
-          units = "degrees")
-### TPI ####
-tpi1_output <- paste0(arsenal,"/fb_dems/1mdem_tpi.tif")
-tpi3_output <- paste0(arsenal,"/fb_dems/3mdem_tpi.tif")
-tpi5_output <- paste0(arsenal,"/fb_dems/5mdem_tpi.tif")
-tpi10_output <- paste0(arsenal,"/fb_dems/10mdem_tpi.tif")
-
-# diff resolutions, but the same kernel size
-wbt_relative_topographic_position(
-    dem = fill1_output, 
-    output = tpi1_output, 
-    filterx=11, 
-    filtery=11)
-wbt_relative_topographic_position(
-    dem = fill3_output, 
-    output = tpi3_output, 
-    filterx=11, 
-    filtery=11)
-wbt_relative_topographic_position(
-    dem = fill5_output, 
-    output = tpi5_output, 
-    filterx=11, 
-    filtery=11)
-wbt_relative_topographic_position(
-    dem = fill10_output, 
-    output = tpi10_output, 
-    filterx=11, 
-    filtery=11)
-### TWI ####
-twi1_output <- paste0(arsenal,"/fb_dems/1mdem_twi.tif")
-twi3_output <- paste0(arsenal,"/fb_dems/3mdem_twi.tif")
-twi5_output <- paste0(arsenal,"/fb_dems/5mdem_twi.tif")
-twi10_output <- paste0(arsenal,"/fb_dems/10mdem_twi.tif")
-
-wbt_wetness_index(sca = flowacc1_output, #flow accumulation
-                  slope = slope1_output,
-                  output = twi1_output)
-wbt_wetness_index(sca = flowacc3_output, #flow accumulation
-                  slope = slope3_output,
-                  output = twi3_output)
-wbt_wetness_index(sca = flowacc5_output, #flow accumulation
-                  slope = slope5_output,
-                  output = twi5_output)
-wbt_wetness_index(sca = flowacc10_output, #flow accumulation
-                  slope = slope10_output,
-                  output = twi10_output)
-### Curve ####
-#1m
-curve1_plan_output <- paste0(arsenal,"/fb_dems/1mdem_curve_plan.tif")
-curve1_prof_output <- paste0(arsenal,"/fb_dems/1mdem_curve_prof.tif")
-curve1_plan <- spatialEco::curvature(rast(dem1_location), type = "planform")
-curve1_prof <- spatialEco::curvature(rast(dem1_location), type = "profile")
-writeRaster(curve1_plan, curve1_plan_output, overwrite = TRUE)
-writeRaster(curve1_prof, curve1_prof_output, overwrite = TRUE)
-#3m 
-curve3_plan_output <- paste0(arsenal,"/fb_dems/3mdem_curve_plan.tif")
-curve3_prof_output <- paste0(arsenal,"/fb_dems/3mdem_curve_prof.tif")
-curve3_plan <- spatialEco::curvature(rast(dem3_location), type = "planform")
-curve3_prof <- spatialEco::curvature(rast(dem3_location), type = "profile")
-writeRaster(curve3_plan, curve3_plan_output, overwrite = TRUE)
-writeRaster(curve3_prof, curve3_prof_output, overwrite = TRUE)
-#5m
-curve5_plan_output <- paste0(arsenal,"/fb_dems/5mdem_curve_plan.tif")
-curve5_prof_output <- paste0(arsenal,"/fb_dems/5mdem_curve_prof.tif")
-curve5_plan <- spatialEco::curvature(rast(dem5_location), type = "planform")
-curve5_prof <- spatialEco::curvature(rast(dem5_location), type = "profile")
-writeRaster(curve5_plan, curve5_plan_output, overwrite = TRUE)
-writeRaster(curve5_prof, curve5_prof_output, overwrite = TRUE)
-#10m
-curve10_plan_output <- paste0(arsenal,"/fb_dems/10mdem_curve_plan.tif")
-curve10_prof_output <- paste0(arsenal,"/fb_dems/10mdem_curve_prof.tif")
-curve10_plan <- spatialEco::curvature(rast(dem10_location), type = "planform")
-curve10_prof <- spatialEco::curvature(rast(dem10_location), type = "profile")
-writeRaster(curve10_plan, curve10_plan_output, overwrite = TRUE)
-writeRaster(curve10_prof, curve10_prof_output, overwrite = TRUE)
-
-```
-```{r}
-##### input points #####
-# input points should be in form of spat vector, with EPSG:26919
-input_points <- fb_stic_locs_r
-writeVector(input_points, "input_pts.shp", overwrite = TRUE)
-### Extracting point values ####
-extract(rast(flowacc10_output), 
-                  input_points, ID = FALSE, bind = TRUE)
-point_values <- 
-  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
-  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
-  as_tibble()
-point_values_comb <- point_values %>%
-  rename_with(~ paste0("point_values", .x))
-  
-### extract by neighborhoods ####
-# create different sized buffers around points, then conduct zonal on them
-buffer10 <- terra::buffer(input_points, width = 10)
-buffer100 <- terra::buffer(input_points, width = 100)
-
-buffed_10m <- bind_cols( 
-  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
-  as_tibble()
-
-buffed_10m_comb <- buffed_10m %>%
-  rename_with(~ paste0("nb10m_", .x))
-
-### extract by watersheds ####
-# snap points to stream network used to delineate subsheds
-# crop by watershed of each tributary
-# read in pour points
-fill1_output
-
-flowacc1_output
-
-flowdir_location <- paste0(arsenal, "/fb_dems/1mdem_fb_flowdir.tif")
-wbt_d8_pointer(dem = fill1_output,
-               output = flowdir_location)
-
-surface_streams <- paste0(arsenal, "/fb_dems/surface_streams_1m.tif")
-wbt_extract_streams(flow_accum = flowacc1_output,
-                    output = surface_streams,
-                    threshold = 2000)
-plot(rast(surface_streams), col ="black", add = TRUE)
-points(input_points, col = "red")
-
-#snap pour point to streams
-subshed_locs_snap <- "subshed_locs_snap_fb.shp"
-wbt_jenson_snap_pour_points(pour_pts = "input_pts.shp",
-                            streams = surface_streams,
-                            output = subshed_locs_snap,
-                            snap_dist = 30)
-
-points(vect(subshed_locs_snap), col= "red")
-
-# delineate sheds, for zonal stats
-d8 <- paste0(arsenal, "/fb_dems/1mdem_fb_d8pt.tif")
-plot(rast(d8))
-subsheds <- "subsheds2.tif"
-wbt_watershed(d8_pntr = d8,
-              pour_pts = subshed_locs_snap,
-              output = subsheds)
-plot(rast(subsheds), col = my_colors)
-zones <- rast(subsheds)
-# Zonal function- take zonal statistics
-# evelation
-dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
-z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
-
- 
- 
-### extract by neighbors in watersheds SETUP ####
-# delineate watersheds for each point...
-
-#creating zone in shed function
-# input_dataset <- depth10
-buffer_dataset <- buffer100
-plot(buffer10)
-zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
-for(i in 1:length(buffer_dataset$ID)){
-#i <- 29
-#input_dataset <- rast(flowacc10_output)
-#buffer_dataset <- buffer1
-#col_name <- "wsnb100_depth10"
-  ID <- buffer_dataset$ID[i]
-  zones <- rast(subsheds)
-
-  zones[zones != ID] <- NA
-  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
-  plot(zones)
-  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
-  input_resamp  <- resample(project(input_dataset, zones_masked), 
-                            zones_masked, method="bilinear")
-  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
-  if(i == 1) alldat <- output
-  if(i > 1) alldat <- rbind(alldat, output)
-}
-  #alldat <- tibble(alldat[,2])
-  colnames(alldat) <- c("ID", col_name)
-  return(alldat)
-}
-
-
-#### Buffer 100 ####
-wsnb100 <- 
-  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
-    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
-    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
-#### Combine all ####
-
-# A PROBLEM TO FIGURE OUT LATER <- ONE OF THESE IS NOT YIELDING THE SAME NUMBER OF ROWS AS THE OTHERS
-all <- 
-  bind_cols(
-    buffed_10m_comb,
-    point_values_comb %>% dplyr::select(point_valuesID,
-                                        point_valuesX10mdem_slope,
-                                        point_valuesX5mdem_slope,
-                                        point_valuesX3mdem_slope)
-  ) %>% 
-  rename(ID = point_valuesID) %>% 
-  right_join(wsnb100, by = "ID") %>% 
-  dplyr::select(-ID)
-
-#check for NAs
-View(all[!complete.cases(all), ])
-na_counts <- colSums(is.na(all))
-
-new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
-
-input_points$persistence <- new_predictions
-ggplot()+
-  geom_spatvector(data = input_points, aes(color = persistence))+
-  scale_color_viridis_c(name = "Predicted Persistence")+
-  theme_void()
-```
-
-
-# RF based on topography for all 3 watersheds
-
-
-Backup plan- use kmeans clustering
-```{r cluster test}
-# k means clustering
-clusters <- no_crazys %>% 
-  dplyr::select(depth_mean, depth_sd) %>% 
-  kmeans(., 3, nstart = 25)
-
-no_crazys$class <- clusters$cluster
-
-```
 
 # DEPREC
 ```{r AGU-talk-just-seismic}
@@ -5705,3 +5221,566 @@ crop_uaab <- crop(uaab, w3_outline)
 mask_uaab <- mask(crop_uaab, w3_outline)
 plot(mask_uaab)
 ```
+
+
+
+Backup plan- use kmeans clustering
+```{r cluster test}
+# k means clustering
+clusters <- no_crazys %>% 
+  dplyr::select(depth_mean, depth_sd) %>% 
+  kmeans(., 3, nstart = 25)
+
+no_crazys$class <- clusters$cluster
+
+```
+
+
+# prediction of the whole network based on RF
+Predicting other watersheds and the whole of W3 will be a back up if topmodel doesn't end up working as we intend
+## Test on one tributary- W2
+```{r generate-points-along-network}
+equally_spaced_points <- st_sample(st_as_sf(W2), size = 100, type = "regular")
+plot(equally_spaced_points)
+# now all I have to do is extract values from the depth-DEM and I can plot again
+bedrock_topo <- rast(bedrock_topo_location)
+bedrock_surface <- terra::extract(bedrock_topo, vect(equally_spaced_points), xy = TRUE, ID = FALSE, bind = TRUE) %>% as_tibble()
+```
+
+Successfully used RF model on new obs! Who knows if they are accurate
+```{r RF-applied-one trib}
+# input points should be in form of spat vector, with EPSG:26919
+input_points <- as_tibble(st_coordinates(equally_spaced_points)) %>% 
+  mutate(ID = row_number()) %>% 
+  vect(geom = c("X", "Y"), crs = crs1) %>% 
+  dplyr::select(-L1)
+writeVector(input_points, "input_pts.shp", overwrite = TRUE)
+### Extracting point values ####
+extract(rast(flowacc10_output), 
+                  input_points, ID = FALSE, bind = TRUE)
+point_values <- 
+  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
+  as_tibble()
+point_values_comb <- point_values %>%
+  rename_with(~ paste0("point_values", .x))
+  
+### extract by neighborhoods ####
+# create different sized buffers around points, then conduct zonal on them
+buffer10 <- terra::buffer(input_points, width = 10)
+buffer100 <- terra::buffer(input_points, width = 100)
+
+buffed_10m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
+  as_tibble()
+
+buffed_10m_comb <- buffed_10m %>%
+  rename_with(~ paste0("nb10m_", .x))
+
+### extract by watersheds ####
+d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
+subsheds <- "subsheds2.tif"
+wbt_watershed(d8_pntr = flowdir_location,
+              pour_pts = "input_pts.shp",
+              output = subsheds)
+plot(rast(subsheds), col = my_colors)
+zones <- rast(subsheds)
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+
+ 
+ 
+### extract by neighbors in watersheds SETUP ####
+# delineate watersheds for each point...
+
+#creating zone in shed function
+# input_dataset <- depth10
+buffer_dataset <- buffer10
+plot(buffer10)
+zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
+for(i in 1:length(buffer_dataset$ID)){
+#i <- 29
+#input_dataset <- rast(flowacc10_output)
+#buffer_dataset <- buffer1
+#col_name <- "wsnb100_depth10"
+  ID <- i
+  zones <- rast(subsheds)
+
+  zones[zones != ID] <- NA
+  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
+  plot(zones)
+  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
+  input_resamp  <- resample(project(input_dataset, zones_masked), 
+                            zones_masked, method="bilinear")
+  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
+  if(i == 1) alldat <- output
+  if(i > 1) alldat <- rbind(alldat, output)
+}
+  #alldat <- tibble(alldat[,2])
+  colnames(alldat) <- c("ID", col_name)
+  return(alldat)
+}
+
+
+#### Buffer 100 ####
+wsnb100 <- 
+  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
+    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
+#### Combine all ####
+
+all <-
+  bind_cols(
+    buffed_10m_comb,
+    wsnb100 %>% tibble() %>% dplyr::select(-ID),
+    point_values_comb %>% dplyr::select(-c(point_valuesL1, point_valuespoint_ID))
+  )
+
+
+#check for NAs
+View(all[!complete.cases(all), ])
+na_counts <- colSums(is.na(all))
+
+new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
+
+input_points$persistence <- new_predictions
+ggplot()+
+  geom_spatvector(data = input_points, aes(color = persistence))
+```
+## Apply to whole W3 network
+Now do for the whole network!
+```{r setup-W3}
+w3_regime
+equally_spaced_points <- st_sample(st_as_sf(w3_regime), size = 400, type = "regular")
+plot(equally_spaced_points)
+
+```
+```{r RF-applied-allW3}
+##### input points #####
+# input points should be in form of spat vector, with EPSG:26919
+input_points <- as_tibble(st_coordinates(equally_spaced_points)) %>% 
+  mutate(ID = row_number()) %>% 
+  vect(geom = c("X", "Y"), crs = crs1) %>% 
+  dplyr::select(-L1)
+writeVector(input_points, "input_pts.shp", overwrite = TRUE)
+### Extracting point values ####
+extract(rast(flowacc10_output), 
+                  input_points, ID = FALSE, bind = TRUE)
+point_values <- 
+  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
+  as_tibble()
+point_values_comb <- point_values %>%
+  rename_with(~ paste0("point_values", .x))
+  
+### extract by neighborhoods ####
+# create different sized buffers around points, then conduct zonal on them
+buffer10 <- terra::buffer(input_points, width = 10)
+buffer100 <- terra::buffer(input_points, width = 100)
+
+buffed_10m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
+  as_tibble()
+
+buffed_10m_comb <- buffed_10m %>%
+  rename_with(~ paste0("nb10m_", .x))
+
+### extract by watersheds ####
+d8 <- paste0(arsenal, "/w3_dems/1mdem_w3_d8pt.tif")
+subsheds <- "subsheds2.tif"
+wbt_watershed(d8_pntr = flowdir_location,
+              pour_pts = "input_pts.shp",
+              output = subsheds)
+plot(rast(subsheds), col = my_colors)
+zones <- rast(subsheds)
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+
+ 
+ 
+### extract by neighbors in watersheds SETUP ####
+# delineate watersheds for each point...
+
+#creating zone in shed function
+# input_dataset <- depth10
+buffer_dataset <- buffer10
+plot(buffer10)
+zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
+for(i in 1:length(buffer_dataset$ID)){
+#i <- 29
+#input_dataset <- rast(flowacc10_output)
+#buffer_dataset <- buffer1
+#col_name <- "wsnb100_depth10"
+  ID <- i
+  zones <- rast(subsheds)
+
+  zones[zones != ID] <- NA
+  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
+  plot(zones)
+  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
+  input_resamp  <- resample(project(input_dataset, zones_masked), 
+                            zones_masked, method="bilinear")
+  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
+  if(i == 1) alldat <- output
+  if(i > 1) alldat <- rbind(alldat, output)
+}
+  #alldat <- tibble(alldat[,2])
+  colnames(alldat) <- c("ID", col_name)
+  return(alldat)
+}
+
+
+#### Buffer 100 ####
+wsnb100 <- 
+  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
+    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
+#### Combine all ####
+
+all <-
+  bind_cols(
+    buffed_10m_comb,
+    wsnb100 %>% tibble() %>% dplyr::select(-ID),
+    point_values_comb %>% dplyr::select(-point_valuesID)
+  )
+
+
+#check for NAs
+View(all[!complete.cases(all), ])
+na_counts <- colSums(is.na(all))
+
+new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
+
+input_points$persistence <- new_predictions
+ggplot()+
+  geom_spatvector(data = input_points, aes(color = persistence))+
+  scale_color_viridis_c(name = "Predicted Persistence")+
+  theme_void()
+```
+
+## Apply to other two watersheds
+In the original generation of all of the topo metrics to test, I make a bunch of different raster datasets. Will need to make them for other 2 watersheds.
+```{r generate-topo-files}
+# outline of shed
+fb_shed_location <- paste0(arsenal, "/fb_dems/fb_shed.tif")
+fb_outline <- as.polygons(rast(fb_shed_location), extent=FALSE)
+plot(fb_outline)
+
+##### Prepare DEMS #####
+dem_location <- paste0(arsenal, "/HB/1m hydro enforced DEM/dem1m.tif")
+dem1 <- rast(dem_location) %>% 
+  crop(fb_outline) %>% 
+  mask(fb_outline)
+dem3 <- aggregate(rast(dem_location), 3) %>% 
+  crop(fb_outline) %>% 
+  mask(fb_outline)
+dem5 <- aggregate(rast(dem_location), 5) %>% 
+  crop(fb_outline) %>% 
+  mask(fb_outline)
+dem10 <- aggregate(rast(dem_location), 10) %>% 
+  crop(fb_outline) %>% 
+  mask(fb_outline)
+
+#save raster, because whitebox wants it is a files location instead of an object in R
+dem1_location <- paste0(arsenal, "/fb_dems/1mdem.tif")
+dem3_location <- paste0(arsenal, "/fb_dems/3mdem.tif")
+dem5_location <- paste0(arsenal, "/fb_dems/5mdem.tif")
+dem10_location <- paste0(arsenal, "/fb_dems/10mdem.tif")
+
+writeRaster(dem1, dem1_location, overwrite = TRUE)
+writeRaster(dem3, dem3_location, overwrite = TRUE)
+writeRaster(dem5, dem5_location, overwrite = TRUE)
+writeRaster(dem10, dem10_location, overwrite = TRUE)
+
+##### STIC locations #####
+stic_locs_snap_location <- paste0(arsenal, "/fb_stic_locs.shp")
+pks_fb <- read_csv(paste0(arsenal, "/pks_fb.csv"))
+
+fb_stic_locs_r <- vect(stic_locs_snap_location)
+
+fb_stic_location <- "fb_stic_locs.shp"
+#writeVector(w3_stic_locs_r, w3_stic_location)
+# come up with a set of functions to extract relevant topography and subsurface neighborhoods
+# checking that DEMs are correct location, and different resolutions
+plot(rast(dem1_location))
+plot(rast(dem3_location))
+plot(rast(dem5_location))
+plot(rast(dem10_location))
+### fill DEMs #####
+fill1_output <- paste0(arsenal,"/fb_dems/1mdem_fill.tif")
+fill3_output <- paste0(arsenal,"/fb_dems/3mdem_fill.tif")
+fill5_output <- paste0(arsenal,"/fb_dems/5mdem_fill.tif")
+fill10_output <- paste0(arsenal,"/fb_dems/10mdem_fill.tif")
+
+wbt_fill_depressions_wang_and_liu(
+  dem = dem1_location,
+  output = fill1_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem3_location,
+  output = fill3_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem5_location,
+  output = fill5_output
+)
+wbt_fill_depressions_wang_and_liu(
+  dem = dem10_location,
+  output = fill10_output
+)
+### Drainage area ####
+flowacc1_output <- paste0(arsenal,"/fb_dems/1mdem_flowacc.tif")
+flowacc3_output <- paste0(arsenal,"/fb_dems/3mdem_flowacc.tif")
+flowacc5_output <- paste0(arsenal,"/fb_dems/5mdem_flowacc.tif")
+flowacc10_output <- paste0(arsenal,"/fb_dems/10mdem_flowacc.tif")
+wbt_d_inf_flow_accumulation(input = fill1_output,
+                            output = flowacc1_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill3_output,
+                            output = flowacc3_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill5_output,
+                            output = flowacc5_output,
+                            out_type = "Specific Contributing Area")
+wbt_d_inf_flow_accumulation(input = fill10_output,
+                            output = flowacc10_output,
+                            out_type = "Specific Contributing Area")
+### Slope ####
+slope1_output <- paste0(arsenal,"/fb_dems/1mdem_slope.tif")
+slope3_output <- paste0(arsenal,"/fb_dems/3mdem_slope.tif")
+slope5_output <- paste0(arsenal,"/fb_dems/5mdem_slope.tif")
+slope10_output <- paste0(arsenal,"/fb_dems/10mdem_slope.tif")
+
+wbt_slope(dem = fill1_output,
+          output = slope1_output,
+          units = "degrees")
+wbt_slope(dem = fill3_output,
+          output = slope3_output,
+          units = "degrees")
+wbt_slope(dem = fill5_output,
+          output = slope5_output,
+          units = "degrees")
+wbt_slope(dem = fill10_output,
+          output = slope10_output,
+          units = "degrees")
+### TPI ####
+tpi1_output <- paste0(arsenal,"/fb_dems/1mdem_tpi.tif")
+tpi3_output <- paste0(arsenal,"/fb_dems/3mdem_tpi.tif")
+tpi5_output <- paste0(arsenal,"/fb_dems/5mdem_tpi.tif")
+tpi10_output <- paste0(arsenal,"/fb_dems/10mdem_tpi.tif")
+
+# diff resolutions, but the same kernel size
+wbt_relative_topographic_position(
+    dem = fill1_output, 
+    output = tpi1_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill3_output, 
+    output = tpi3_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill5_output, 
+    output = tpi5_output, 
+    filterx=11, 
+    filtery=11)
+wbt_relative_topographic_position(
+    dem = fill10_output, 
+    output = tpi10_output, 
+    filterx=11, 
+    filtery=11)
+### TWI ####
+twi1_output <- paste0(arsenal,"/fb_dems/1mdem_twi.tif")
+twi3_output <- paste0(arsenal,"/fb_dems/3mdem_twi.tif")
+twi5_output <- paste0(arsenal,"/fb_dems/5mdem_twi.tif")
+twi10_output <- paste0(arsenal,"/fb_dems/10mdem_twi.tif")
+
+wbt_wetness_index(sca = flowacc1_output, #flow accumulation
+                  slope = slope1_output,
+                  output = twi1_output)
+wbt_wetness_index(sca = flowacc3_output, #flow accumulation
+                  slope = slope3_output,
+                  output = twi3_output)
+wbt_wetness_index(sca = flowacc5_output, #flow accumulation
+                  slope = slope5_output,
+                  output = twi5_output)
+wbt_wetness_index(sca = flowacc10_output, #flow accumulation
+                  slope = slope10_output,
+                  output = twi10_output)
+### Curve ####
+#1m
+curve1_plan_output <- paste0(arsenal,"/fb_dems/1mdem_curve_plan.tif")
+curve1_prof_output <- paste0(arsenal,"/fb_dems/1mdem_curve_prof.tif")
+curve1_plan <- spatialEco::curvature(rast(dem1_location), type = "planform")
+curve1_prof <- spatialEco::curvature(rast(dem1_location), type = "profile")
+writeRaster(curve1_plan, curve1_plan_output, overwrite = TRUE)
+writeRaster(curve1_prof, curve1_prof_output, overwrite = TRUE)
+#3m 
+curve3_plan_output <- paste0(arsenal,"/fb_dems/3mdem_curve_plan.tif")
+curve3_prof_output <- paste0(arsenal,"/fb_dems/3mdem_curve_prof.tif")
+curve3_plan <- spatialEco::curvature(rast(dem3_location), type = "planform")
+curve3_prof <- spatialEco::curvature(rast(dem3_location), type = "profile")
+writeRaster(curve3_plan, curve3_plan_output, overwrite = TRUE)
+writeRaster(curve3_prof, curve3_prof_output, overwrite = TRUE)
+#5m
+curve5_plan_output <- paste0(arsenal,"/fb_dems/5mdem_curve_plan.tif")
+curve5_prof_output <- paste0(arsenal,"/fb_dems/5mdem_curve_prof.tif")
+curve5_plan <- spatialEco::curvature(rast(dem5_location), type = "planform")
+curve5_prof <- spatialEco::curvature(rast(dem5_location), type = "profile")
+writeRaster(curve5_plan, curve5_plan_output, overwrite = TRUE)
+writeRaster(curve5_prof, curve5_prof_output, overwrite = TRUE)
+#10m
+curve10_plan_output <- paste0(arsenal,"/fb_dems/10mdem_curve_plan.tif")
+curve10_prof_output <- paste0(arsenal,"/fb_dems/10mdem_curve_prof.tif")
+curve10_plan <- spatialEco::curvature(rast(dem10_location), type = "planform")
+curve10_prof <- spatialEco::curvature(rast(dem10_location), type = "profile")
+writeRaster(curve10_plan, curve10_plan_output, overwrite = TRUE)
+writeRaster(curve10_prof, curve10_prof_output, overwrite = TRUE)
+
+```
+```{r}
+##### input points #####
+# input points should be in form of spat vector, with EPSG:26919
+input_points <- fb_stic_locs_r
+writeVector(input_points, "input_pts.shp", overwrite = TRUE)
+### Extracting point values ####
+extract(rast(flowacc10_output), 
+                  input_points, ID = FALSE, bind = TRUE)
+point_values <- 
+  extract(rast(slope10_output), input_points, ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope5_output), ., ID = FALSE, bind = TRUE) %>%
+  extract(rast(slope3_output), ., ID = FALSE, bind = TRUE) %>%
+  as_tibble()
+point_values_comb <- point_values %>%
+  rename_with(~ paste0("point_values", .x))
+  
+### extract by neighborhoods ####
+# create different sized buffers around points, then conduct zonal on them
+buffer10 <- terra::buffer(input_points, width = 10)
+buffer100 <- terra::buffer(input_points, width = 100)
+
+buffed_10m <- bind_cols( 
+  zonal(rast(flowacc10_output), buffer10, fun = "mean", na.rm = TRUE)) %>% 
+  as_tibble()
+
+buffed_10m_comb <- buffed_10m %>%
+  rename_with(~ paste0("nb10m_", .x))
+
+### extract by watersheds ####
+# snap points to stream network used to delineate subsheds
+# crop by watershed of each tributary
+# read in pour points
+fill1_output
+
+flowacc1_output
+
+flowdir_location <- paste0(arsenal, "/fb_dems/1mdem_fb_flowdir.tif")
+wbt_d8_pointer(dem = fill1_output,
+               output = flowdir_location)
+
+surface_streams <- paste0(arsenal, "/fb_dems/surface_streams_1m.tif")
+wbt_extract_streams(flow_accum = flowacc1_output,
+                    output = surface_streams,
+                    threshold = 2000)
+plot(rast(surface_streams), col ="black", add = TRUE)
+points(input_points, col = "red")
+
+#snap pour point to streams
+subshed_locs_snap <- "subshed_locs_snap_fb.shp"
+wbt_jenson_snap_pour_points(pour_pts = "input_pts.shp",
+                            streams = surface_streams,
+                            output = subshed_locs_snap,
+                            snap_dist = 30)
+
+points(vect(subshed_locs_snap), col= "red")
+
+# delineate sheds, for zonal stats
+d8 <- paste0(arsenal, "/fb_dems/1mdem_fb_d8pt.tif")
+plot(rast(d8))
+subsheds <- "subsheds2.tif"
+wbt_watershed(d8_pntr = d8,
+              pour_pts = subshed_locs_snap,
+              output = subsheds)
+plot(rast(subsheds), col = my_colors)
+zones <- rast(subsheds)
+# Zonal function- take zonal statistics
+# evelation
+dem_r  <- resample(project(depth1, zones), zones, method="bilinear")
+z_dem <- zonal(dem_r, zones, fun = "mean", na.rm = TRUE)
+
+ 
+ 
+### extract by neighbors in watersheds SETUP ####
+# delineate watersheds for each point...
+
+#creating zone in shed function
+# input_dataset <- depth10
+buffer_dataset <- buffer100
+plot(buffer10)
+zone_in_shed <- function(input_dataset, buffer_dataset, col_name){
+for(i in 1:length(buffer_dataset$ID)){
+#i <- 29
+#input_dataset <- rast(flowacc10_output)
+#buffer_dataset <- buffer1
+#col_name <- "wsnb100_depth10"
+  ID <- buffer_dataset$ID[i]
+  zones <- rast(subsheds)
+
+  zones[zones != ID] <- NA
+  zones_masked <- mask(zones, buffer_dataset[buffer_dataset$ID == ID])
+  plot(zones)
+  plot(buffer_dataset[buffer_dataset$ID == ID], add = TRUE)
+  input_resamp  <- resample(project(input_dataset, zones_masked), 
+                            zones_masked, method="bilinear")
+  output <- zonal(input_resamp, zones_masked, fun = "mean", na.rm = TRUE)
+  if(i == 1) alldat <- output
+  if(i > 1) alldat <- rbind(alldat, output)
+}
+  #alldat <- tibble(alldat[,2])
+  colnames(alldat) <- c("ID", col_name)
+  return(alldat)
+}
+
+
+#### Buffer 100 ####
+wsnb100 <- 
+  zone_in_shed(rast(flowacc10_output), buffer100, "wsnb100_flowacc10") %>% 
+    full_join(zone_in_shed(rast(tpi5_output), buffer100, "wsnb100_tpi5")) %>%
+    full_join(zone_in_shed(curve1_plan, buffer100, "wsnb100_curve1_plan"))
+#### Combine all ####
+
+# A PROBLEM TO FIGURE OUT LATER <- ONE OF THESE IS NOT YIELDING THE SAME NUMBER OF ROWS AS THE OTHERS
+all <- 
+  bind_cols(
+    buffed_10m_comb,
+    point_values_comb %>% dplyr::select(point_valuesID,
+                                        point_valuesX10mdem_slope,
+                                        point_valuesX5mdem_slope,
+                                        point_valuesX3mdem_slope)
+  ) %>% 
+  rename(ID = point_valuesID) %>% 
+  right_join(wsnb100, by = "ID") %>% 
+  dplyr::select(-ID)
+
+#check for NAs
+View(all[!complete.cases(all), ])
+na_counts <- colSums(is.na(all))
+
+new_predictions <- predict(iris.vsurf, newdata = all, step = "pred")
+
+input_points$persistence <- new_predictions
+ggplot()+
+  geom_spatvector(data = input_points, aes(color = persistence))+
+  scale_color_viridis_c(name = "Predicted Persistence")+
+  theme_void()
+```
+
+
+# RF based on topography for all 3 watersheds
