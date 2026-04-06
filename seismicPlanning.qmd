@@ -3769,12 +3769,12 @@ all_wsnb <-
   #dplyr::select(-wsnb1_ROE) %>% 
   #dplyr::select(-wsnb1_uaab)
 all <- bind_cols(point_values_comb, buffed_10m_comb, buffed_20m_comb, buffed_100m_comb, wshed_zones) %>% 
-  dplyr::select(-point_valueswshed) 
+  dplyr::select(-point_valueswshed) %>% 
+  filter(point_valuesID %in% W3_IDs)
 
 all_zeros <- all
 all_zeros[is.na(all_zeros)] <- 0
-all <- bind_cols(all, all_wsnb) %>% 
-  dplyr::select(where(~!any(is.na(.))))
+
   #drop_na()
 #check for NAs
 View(all_zeros[!complete.cases(all_zeros), ])
@@ -3793,6 +3793,7 @@ names(na_counts[na_counts > 0])
 ```
 
 After calcing all of these co-variates, do some pre-processing
+No longer doing- results in poorer models, and because I reduced the number of variables to start with I don't think this is necessary any more
 ```{r}
 cor_mat <- cor(depths_hehe %>% dplyr::select(-point_valuespk), use = "complete.obs")
 
@@ -3817,7 +3818,7 @@ depths_hehe <- all_zeros %>%
                 #"nb100m_catcharea_br_SHRINKED...67",
                 #"nb100m_f083871fa0116b17b7398ca48eac7627",
                 contains("soil"),
-                #contains("uaab"),
+                contains("uaab"),
                 contains("ROE"))
 
 low_cor %>% 
@@ -4044,7 +4045,8 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method
 # Final whole RF, produce outputs for paper
 ```{r RF just depths}
 #remove ID column
-all_df <- as.data.frame(depths_hehe) #%>% 
+all_df <- as.data.frame(depths_hehe)
+  
 
 # VSURF routine
 iris.learn <- list()
@@ -4060,12 +4062,46 @@ plot(iris.vsurf)
 colnames(iris.learn$training[iris.vsurf$varselect.interp])
 colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
+#final_vars <- c("meanuaab_wshed", "nb100m_mean_depth1m", "nb10m_mean_depth1m")
 
 iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "interp")
 #calculate RMSE
-tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
-  mutate(diff = actual - iris.predictions) %>% 
+rf_pred <- tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) 
+
+rf_pred %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
+
+
+
+
+w3_final_stics_resid <- w3_stic_locs_r %>% 
+  filter(ID %in% W3_IDs) %>% 
+  tidyterra::mutate(resid = rf_pred$diff)
+  
+# plot of residuals in space
+depth_resid <- ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = w3_final_stics_resid, 
+          aes(fill = resid), 
+          size = 3, 
+          pch = 21)+
+  #scale_fill_viridis_c() +
+  scale_fill_gradient2(name = "Error of flow persistence prediction")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "right")
+
 
 
 
@@ -4116,10 +4152,9 @@ plotres(RFDef, which = 4)
 #calculate individual ALE
 predictor <- Predictor$new(model = RFDef, data = chosen_df, y = "point_valuespk")
 effs <- FeatureEffects$new(predictor, grid.size = 10)
-p1 <- effs$effects[["nb100m_mean_depth1m"]]$plot() + theme_classic() +
-  ylab(y = "ALE on flow persistence prediction")
-p2 <- effs$effects[["nb10m_mean_depth1m"]]$plot() + theme_classic()
-p3 <- effs$effects[["avgdepth1m_wshed"]]$plot() + theme_classic()
+p1 <- effs$effects[["meanuaab_wshed"]]$plot() + theme_classic() 
+p2 <- effs$effects[["nb100m_mean_depth1m"]]$plot() + theme_classic()
+p3 <- effs$effects[["nb10m_mean_depth1m"]]$plot() + theme_classic()
 p1 + p2+ p3
 
 pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
@@ -4152,20 +4187,51 @@ plot(iris.vsurf)
 colnames(iris.learn$training[iris.vsurf$varselect.interp])
 colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
+final_vars <- c("point_valuesX5mdem_slope", "point_valuesX10mdem_slope",
+                "tpi1m_wshed", "point_valuesX5mdem_twi")
 
 iris.predictions <- predict(iris.vsurf, newdata = iris.learn$training, step = "pred")
 #calculate RMSE
-tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
-  mutate(diff = actual - iris.predictions) %>% 
+rf_pred <- tibble(iris.predictions, "actual" = iris.learn$pk) %>% 
+  mutate(diff = actual - iris.predictions) 
+
+rf_pred %>% 
   summarise(RMSE = sqrt(mean((actual - iris.predictions)^2)))
 
+
+
+
+w3_final_stics_resid <- w3_stic_locs_r %>% 
+  tidyterra::mutate(resid = rf_pred$diff) %>% 
+  filter(ID %in% W3_IDs)
+resid_all <- ggplot()+
+  theme_void()+
+  geom_sf(data = w3_outline, color = "grey", fill = NA, alpha = 0.3, lwd = 2)+
+  geom_sf(data = w3_stream, colour = "#9AC0CD", lwd = 1) +
+  geom_sf(data = w3_final_stics_resid, 
+          aes(fill = resid), 
+          size = 3, 
+          pch = 21)+
+  #scale_fill_viridis_c() +
+  scale_fill_gradient2(name = "Error of flow persistence prediction")+
+  theme_classic()+
+  theme(rect = element_rect(fill = "transparent", color = NA),
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank(),
+        legend.position = "right")
 
 
 # subset after VSURF selection routine
 chosen_vars <- colnames(iris.learn$training[iris.vsurf$varselect.pred])
 
 chosen_df <- all_df %>% 
-  dplyr::select(point_valuespk, chosen_vars)
+  dplyr::select(point_valuespk, final_vars)
 
 # Run normal RF and output OOB error, number of variables
 RFDef <- randomForest(point_valuespk ~ ., data = chosen_df, na.action = na.omit, ntree = 5000, importance = TRUE)
@@ -4173,6 +4239,7 @@ RFDef
 plot(RFDef)
 
 varImpPlot(RFDef, type = 1, scale = TRUE, cex = 0.8, main = "Variable importance")
+ggsave("vi_all.png")
 
 
 # Plot residual plots
@@ -4190,6 +4257,7 @@ p2 <- effs$effects[["point_valuesX10mdem_slope"]]$plot() + theme_classic()
 p3 <- effs$effects[["point_valuesX5mdem_twi"]]$plot() + theme_classic()
 p4 <- effs$effects[["tpi1m_wshed"]]$plot() + theme_classic()
 p1 + p2+ p3 + p4
+ggsave("ALE_all.pdf")
 
 pred.bike = Predictor$new(RFDef, data = chosen_df, y = "point_valuespk")
 
@@ -4201,6 +4269,11 @@ FeatureEffect$new(pred.bike, feature = c(chosen_vars[1], chosen_vars[3]), method
   scale_fill_viridis_c()+ 
 FeatureEffect$new(pred.bike, feature = c(chosen_vars[2], chosen_vars[3]), method = "ale", grid.size = 40)$plot()+
   scale_fill_viridis_c()
+```
+
+```{r}
+resid_all + depth_resid + plot_layout(guides = "collect")
+ggsave("resid.png", scale = 2)
 ```
 
 
@@ -4894,7 +4967,7 @@ data("toys")
 ```
 
 
-# Monte Carlo experiments
+## Monte Carlo experiments
 ## Enter the casino
 GPT error propagation method
 ```{r}
@@ -5236,7 +5309,7 @@ no_crazys$class <- clusters$cluster
 ```
 
 
-# prediction of the whole network based on RF
+## prediction of the whole network based on RF
 Predicting other watersheds and the whole of W3 will be a back up if topmodel doesn't end up working as we intend
 ## Test on one tributary- W2
 ```{r generate-points-along-network}
@@ -5783,4 +5856,4 @@ ggplot()+
 ```
 
 
-# RF based on topography for all 3 watersheds
+## RF based on topography for all 3 watersheds
