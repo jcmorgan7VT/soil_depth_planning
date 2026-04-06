@@ -3051,6 +3051,10 @@ mask_soil_uniform <- (mask_soil * 0) + 1
 plot(mask_soil_uniform)
 ```
 Removed all total depths/volumes of storage, because they were too related to drainage area. 
+```{r SKIP CHUNK BELOW}
+all_zeros <- read_csv("all_rf_inputs.csv")
+```
+
 ```{r prepare-RF-inputs}
 # uaab from JP
 uaab <- (rast("uaab_norm2_SHRINKED.tif"))
@@ -3782,7 +3786,7 @@ na_counts <- colSums(is.na(all_zeros))
 
 names(na_counts[na_counts > 0])
 
-#write_csv(all, "all_rf_inputs.csv")
+write_csv(all, "all_rf_inputs.csv")
 ### Or just include ratio of depths...
 #calculate the ratio of depth nearby to close
 # 1m, 5m, 10m, 100m neighborhoods
