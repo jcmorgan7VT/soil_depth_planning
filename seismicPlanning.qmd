@@ -652,7 +652,7 @@ plot(k_terra_variance)
 
 krig_location <- "krig_output.tif"
 writeRaster(k_terra, krig_location, overwrite = TRUE)
-
+k_terra <- rast(krig_location)
 ```
 ```{r contour plots}
 # Generated function
@@ -769,7 +769,7 @@ subsurface_conts <- make_contours_sf(
   interval = 1,
   major_interval = 5
 )
-chosen <- c(1, 6, 4, 10, 12, 13, 14)
+chosen <- c(1, 6, 4, 10)
 
 subsurface_conts_plot <- 
   ggplot() +
